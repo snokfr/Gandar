@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: stable
+  # The client id is injected at build time; a placeholder keeps CI honest
+  # without requiring a real Spotify application.
+  SPOTIFY_CLIENT_ID: ci-placeholder
+
+jobs:
+  analyze-and-test:
+    name: Analyze & test (ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate code (drift)
+        run: dart run build_runner build
+
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+  build-windows:
+    name: Build (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate code (drift)
+        run: dart run build_runner build
+
+      - name: Build Windows release
+        run: flutter build windows --release --dart-define=SPOTIFY_CLIENT_ID=${{ env.SPOTIFY_CLIENT_ID }}
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gandar-windows-debug-artifact
+          path: build/windows/x64/runner/Release/
+          if-no-files-found: error
+          retention-days: 7

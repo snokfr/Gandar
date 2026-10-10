@@ -1,0 +1,13 @@
+# Normalize line endings so Windows checkouts do not churn the whole tree.
+* text=auto eol=lf
+
+# Windows-only build scripts need CRLF.
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets.
+*.png binary
+*.jpg binary
+*.ico binary
+*.ttf binary
+*.zip binary

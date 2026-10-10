@@ -1,0 +1,23 @@
+# Example Gandar theme.
+#
+# Import it from Settings -> Themes -> Import.
+# Every color accepts "#RRGGBB", "#AARRGGBB", bare hex, or an integer.
+format: gandar.theme
+version: 1
+id: midnight_amber
+name: Midnight Amber
+brightness: dark
+colors:
+  backgroundPrimary: "#0E0C0A"
+  backgroundSecondary: "#171310"
+  surface: "#1F1913"
+  surfaceElevated: "#2C231A"
+  textPrimary: "#F6EDE3"
+  textSecondary: "#B7A18C"
+  accent: "#E39B4A"
+  accentAlt: "#C2662E"
+  border: "#382C21"
+radius:
+  sm: 8
+  md: 14
+  lg: 24

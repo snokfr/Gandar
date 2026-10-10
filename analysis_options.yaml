@@ -1,0 +1,30 @@
+# Analysis configuration for Gandar.
+#
+# Starts from the Flutter-recommended set and adds a handful of higher-signal
+# rules that have proven useful for a layered codebase like this one.
+
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - windows/**
+    - "**.g.dart"
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+
+linter:
+  rules:
+    # Catch leftover debugging output in shipping code.
+    - avoid_print
+    # Prefer `const` where the value never changes.
+    - prefer_const_declarations
+    # `(x) => f(x)` should be `f`.
+    - unnecessary_lambdas
+    # Use `super.key` / `super.param` in constructors.
+    - use_super_parameters
+    # Keep `dart:` imports before package/relative imports.
+    - directives_ordering
