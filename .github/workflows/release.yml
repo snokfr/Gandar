@@ -2,6 +2,12 @@ name: Release
 
 # Publishes downloadable builds when a version tag (e.g. v0.1.0) is pushed.
 #
+# The published builds deliberately carry NO Spotify client id. Baking one into
+# a public artifact would hand every downloader the maintainer's client id, so
+# instead these builds start without sign-in and direct the user to the
+# instructions in README.md. Users who want a working sign-in build run
+# `flutter build ... --dart-define=SPOTIFY_CLIENT_ID=their_own_id` locally.
+#
 # Linux and macOS desktop builds are intentionally absent: they need their own
 # media_kit_libs_* packages and a verified build before they can ship. Add them
 # together with those dependencies in a follow-up.
@@ -43,7 +49,8 @@ jobs:
           flutter test
 
       - name: Build Windows release
-        run: flutter build windows --release --dart-define=SPOTIFY_CLIENT_ID=${{ secrets.SPOTIFY_CLIENT_ID }}
+        # No --dart-define: see the note at the top of this file.
+        run: flutter build windows --release
 
       - name: Package Windows build
         shell: pwsh
@@ -81,7 +88,8 @@ jobs:
         run: dart run build_runner build
 
       - name: Build APK
-        run: flutter build apk --release --dart-define=SPOTIFY_CLIENT_ID=${{ secrets.SPOTIFY_CLIENT_ID }}
+        # No --dart-define: see the note at the top of this file.
+        run: flutter build apk --release
 
       - uses: actions/upload-artifact@v4
         with:
@@ -103,6 +111,24 @@ jobs:
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           generate_release_notes: true
+          body: |
+            ## Downloading a build
+
+            These builds ship **without a Spotify client id**, so the sign-in
+            button explains that a client id is required. To get a build you can
+            actually sign in with, follow the steps in the README and build
+            locally:
+
+            ```bash
+            flutter build windows --release --dart-define=SPOTIFY_CLIENT_ID=your_own_client_id
+            ```
+
+            ### About the Android APK
+
+            The APK is a **preview**: the app builds and runs, but Android still
+            needs an audio backend (`media_kit_libs_android_audio`), a background
+            playback service and a custom-scheme sign-in redirect. Use the
+            Windows build for now.
           files: |
             artifacts/gandar-windows-x64/gandar-windows-x64.zip
             artifacts/gandar-android-apk/app-release.apk

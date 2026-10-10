@@ -9,7 +9,20 @@ comes from Spotify; the audio never does.
 
 > **Status: Phase 1 (desktop foundation).** The desktop app is complete and
 > runs on Windows. Android adaptation (background audio service, media
-> notifications, lock-screen controls) and the release pipeline are Phase 2/3.
+> notifications, lock-screen controls) is Phase 2; the CI and release workflows
+> are written but have not been executed yet.
+
+---
+
+## Documentation
+
+| Document | Contents |
+| --- | --- |
+| [docs/styling.md](docs/styling.md) | **Write your own theme.** The custom theme file format: field-by-field reference, colour formats, validation errors, worked examples, checklist |
+| [docs/building.md](docs/building.md) | Install Flutter, configure Spotify, run in debug, build a release, packaging and signing, GitHub Actions releases, troubleshooting |
+| [docs/architecture.md](docs/architecture.md) | Layer boundaries and the reasoning behind the audio engine, extraction, auth and database choices |
+| [docs/theming-internals.md](docs/theming-internals.md) | Contributors only: how design tokens become a Material theme, and the rules that keep user themes working |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Where to add settings, themes, migrations and tests |
 
 ---
 
@@ -41,9 +54,12 @@ comes from Spotify; the audio never does.
 
 - Two built-in themes: **Spotify Classic** (`#1DB954` on near-black) and
   **Earthy Brown** (warm charcoal, espresso, mahogany and amber).
-- Import and export themes as `.json` **or** `.yaml`.
-- Quick customization of the accent colour and corner radius; custom themes are
-  saved and selectable.
+- **Bring your own:** a theme is a small JSON or YAML file describing every
+  colour and corner radius. Import it and the whole app restyles instantly — no
+  code, no rebuild. See [docs/styling.md](docs/styling.md) and the ready-made
+  files in [examples/themes/](examples/themes).
+- Quick customization of the accent colour and corner radius from inside the
+  app; custom themes are saved and selectable.
 
 **Smart cache**
 
@@ -96,12 +112,15 @@ Without `SPOTIFY_CLIENT_ID` the app still runs — themes, playback settings and
 the cache all work locally — but the sign-in screen will explain what is
 missing.
 
-### 3. Build
+### 3. Build a release
 
 ```bash
 flutter build windows --release --dart-define=SPOTIFY_CLIENT_ID=your_client_id_here
 flutter build apk --release --dart-define=SPOTIFY_CLIENT_ID=your_client_id_here   # Phase 2
 ```
+
+Full instructions, packaging and automated releases:
+**[docs/building.md](docs/building.md)**.
 
 ---
 
@@ -131,6 +150,7 @@ Notable choices:
 | Database | `drift` (SQLite) | Typed queries and migrations for the mapping/cache/history tables |
 | Auth | Hand-rolled PKCE + loopback server | Pure Dart, no native plugin, fully unit-testable |
 | Extraction | `youtube_explode_dart` behind an interface | YouTube extraction is fragile; swap in `yt-dlp` or NewPipe without touching playback |
+| Styling | Design tokens → one `ThemeEngine` mapping | No colour or radius literals in feature code, so a user-authored theme restyles everything |
 
 ---
 
@@ -141,17 +161,25 @@ flutter analyze
 flutter test
 ```
 
-136 tests cover the theme codec (JSON + YAML round-trips and validation),
-playback settings and persistence, mpv filter-string generation, equal-power
-crossfade math, momentum projection, both shuffle strategies, the playback
-queue, LRU/idle cache eviction, stream pre-fetching, PKCE and the OAuth flow,
-the Spotify API client (including the deprecated-endpoint fallbacks) and the
-drift repositories.
+141 tests cover the theme codec (JSON + YAML round-trips, validation, and every
+example theme file that ships in [examples/themes/](examples/themes) — so the
+documented format cannot drift from the code), playback settings and
+persistence, mpv filter-string generation, equal-power crossfade math, momentum
+projection, both shuffle strategies, the playback queue, LRU/idle cache
+eviction, stream pre-fetching, PKCE and the OAuth flow, the Spotify API client
+(including the deprecated-endpoint fallbacks) and the drift repositories.
 
 ---
 
 ## Known limitations
 
+- **Published release builds ship without a Spotify client id**, so their
+  sign-in button reports that an id is required. Including a client id in a
+  public artifact would expose it to everyone who downloads a build. To sign in,
+  build locally with your own id (see
+  [docs/building.md](docs/building.md#6-automated-releases-github-actions)).
+  A runtime "enter your client id" field in Settings would remove this
+  limitation.
 - **YouTube extraction is inherently fragile.** YouTube changes its player
   responses regularly, so a stream that resolves today may return 403
   tomorrow. Gandar isolates this behind `AudioResolver`, tries several
@@ -162,6 +190,9 @@ drift repositories.
   only allow-listed accounts can sign in, and some endpoints may be rate
   limited. Gandar surfaces a 403 with that explanation rather than failing
   silently.
+- **Light themes are less battle-tested than dark ones.** The default is dark;
+  [Paper Light](examples/themes/paper_light.gandar-theme.json) is the only light
+  example, and contrast is not automatic outside the accent pair.
 - **Debug builds log a media_kit warning.** `media_kit`'s debug-only native
   reference holder tries to write a lock file into `%TEMP%`. Its failure is
   harmless (the code path returns immediately when not in debug mode) and does

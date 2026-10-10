@@ -1,0 +1,23 @@
+{
+  "format": "gandar.theme",
+  "version": 1,
+  "id": "paper_light",
+  "name": "Paper Light",
+  "brightness": "light",
+  "colors": {
+    "backgroundPrimary": "#F6F2EB",
+    "backgroundSecondary": "#EDE6DA",
+    "surface": "#FFFFFF",
+    "surfaceElevated": "#F7F2E9",
+    "textPrimary": "#241E18",
+    "textSecondary": "#6B6156",
+    "accent": "#A8551F",
+    "accentAlt": "#C2762F",
+    "border": "#DED5C7"
+  },
+  "radius": {
+    "sm": 6,
+    "md": 10,
+    "lg": 16
+  }
+}

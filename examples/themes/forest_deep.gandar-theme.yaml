@@ -1,0 +1,20 @@
+# A saturated dark theme: deep forest greens with a mid-tone accent.
+format: gandar.theme
+version: 1
+id: forest_deep
+name: Deep Forest
+brightness: dark
+colors:
+  backgroundPrimary: "#0A1410"
+  backgroundSecondary: "#0F1D17"
+  surface: "#14251D"
+  surfaceElevated: "#1D3529"
+  textPrimary: "#E8F1EA"
+  textSecondary: "#93A99B"
+  accent: "#3FA96B"
+  accentAlt: "#7BD3A0"
+  border: "#24402F"
+radius:
+  sm: 4
+  md: 10
+  lg: 18
