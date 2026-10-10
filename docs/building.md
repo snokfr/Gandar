@@ -82,10 +82,11 @@ nothing secret-shaped is ever committed:
 Without it the app still runs — themes, playback settings and the cache all
 work — and the sign-in screen tells you the variable is missing.
 
-To stop typing it, add a `--dart-define-from-file` file (do **not** commit it):
+To stop typing it, add a `--dart-define-from-file` file. That filename is
+already git-ignored, so there is nothing to remember:
 
-```json
-// dart_defines.json  — add this filename to .gitignore
+```jsonc
+// dart_defines.json  (in .gitignore — safe for your client id)
 { "SPOTIFY_CLIENT_ID": "your_client_id" }
 ```
 
@@ -205,8 +206,9 @@ storeFile=C:/Users/you/gandar-upload.jks
 ```
 
 Then wire it into `android/app/build.gradle.kts` (`signingConfigs.release`)
-following the [Flutter Android signing guide](https://docs.flutter.dev/deployment/android#signing-the-app),
-and add both `android/key.properties` and `*.jks` to `.gitignore`.
+following the [Flutter Android signing guide](https://docs.flutter.dev/deployment/android#signing-the-app).
+Both `android/key.properties` and `*.jks` are already git-ignored, so a keystore
+cannot be committed by accident.
 
 Also note: the OAuth flow uses a loopback HTTP redirect, which is the desktop
 path. Android needs a custom-scheme redirect registered with Spotify, so the

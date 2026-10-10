@@ -49,3 +49,10 @@ app.*.map.json
 
 # Tooling metadata
 /.freebuff/
+
+# Local secrets and signing material — never commit these
+dart_defines.json
+*.defines.json
+*.jks
+*.keystore
+
