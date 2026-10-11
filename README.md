@@ -199,6 +199,13 @@ That script builds the Windows release and copies the whole bundle to
 and the one to ship. Details:
 [Release build — Windows](docs/building.md#4-release-build--windows).
 
+**The finished app is `dist/Gandar/Gandar.exe`.** Double-click that file; the
+rest of the folder has to stay next to it, because it is what the exe loads
+the Flutter engine, libmpv and SQLite from. Building by hand instead —
+`flutter build windows --release` — puts the same bundle somewhere else,
+`build/windows/x64/runner/Release/`, which `flutter clean` deletes; that path
+is a build artefact, `dist/Gandar/` is the one to point people at.
+
 Full instructions, packaging and automated releases:
 **[docs/building.md](docs/building.md)**.
 
