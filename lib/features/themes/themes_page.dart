@@ -12,6 +12,7 @@ import '../../core/theme/theme_codec.dart';
 import '../../core/theme/theme_tokens.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
+import 'theme_editor.dart';
 
 /// Select, import, export and tweak themes.
 class ThemesPage extends ConsumerStatefulWidget {
@@ -71,11 +72,13 @@ class _ThemesPageState extends ConsumerState<ThemesPage> {
             ),
           const SizedBox(height: 8),
           const SectionHeader(
-            title: 'Customize active theme',
-            subtitle: 'Adjust the accent colour and corner radius',
+            title: 'Customize',
+            subtitle:
+                'Every colour and radius the active theme uses, live. A '
+                'built-in theme is copied rather than changed.',
           ),
           const SizedBox(height: 12),
-          _AccentEditor(tokens: themeState.active),
+          const ThemeEditor(),
         ],
       ),
     );
@@ -221,77 +224,5 @@ class _Swatches extends StatelessWidget {
           ),
       ],
     );
-  }
-}
-
-/// Quick customization: accent colour + corner radius.
-class _AccentEditor extends ConsumerWidget {
-  const _AccentEditor({required this.tokens});
-
-  final ThemeTokens tokens;
-
-  static const List<int> _accentChoices = <int>[
-    0xFF1DB954, // Spotify green
-    0xFFC8763C, // amber
-    0xFF8C4A2F, // mahogany
-    0xFF7C4DFF, // violet
-    0xFF2D7FF9, // azure
-    0xFFE5484D, // crimson
-    0xFF14B8A6, // teal
-  ];
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return GandarCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Accent', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: [
-              for (final value in _accentChoices)
-                GestureDetector(
-                  onTap: () => _apply(ref, tokens.copyWith(accent: value)),
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: Color(value),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: tokens.accent == value
-                            ? Theme.of(context).colorScheme.onSurface
-                            : tokens.borderColor,
-                        width: tokens.accent == value ? 2 : 1,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          SettingSliderTile(
-            title: 'Corner radius',
-            value: tokens.radiusMd,
-            min: 0,
-            max: 32,
-            divisions: 32,
-            valueLabel: (v) => v.toStringAsFixed(0),
-            onChanged: (v) => _apply(ref, tokens.copyWith(radiusMd: v)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Saves the tweaked theme as a custom theme named after the base.
-  void _apply(WidgetRef ref, ThemeTokens next) {
-    final custom = next.copyWith(
-      id: '${next.id}_custom',
-      name: '${next.name} (custom)',
-    );
-    ref.read(themeProvider.notifier).importTheme(custom);
   }
 }

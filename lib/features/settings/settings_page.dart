@@ -7,13 +7,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/logging/app_logger.dart';
 
-import '../../core/settings/eq_presets.dart';
 import '../../core/settings/playback_settings.dart';
 import '../../core/theme/theme_engine.dart';
 import '../../domain/models/cache_entry.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
 import '../player/player_surface.dart';
+import 'eq_editor.dart';
 import 'savings_card.dart';
 
 /// Settings modeled on Spotify's playback menu plus Gandar's extra controls.
@@ -53,67 +53,7 @@ class SettingsPage extends ConsumerWidget {
           const SizedBox(height: 16),
 
           // ---- Equalizer -------------------------------------------------
-          GandarCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SettingSwitchTile(
-                  title: 'Equalizer',
-                  description:
-                      'Shape the sound with a 10-band equalizer and presets.',
-                  value: settings.eqEnabled,
-                  onChanged: (v) =>
-                      notifier.update(settings.copyWith(eqEnabled: v)),
-                ),
-                if (settings.eqEnabled) ...[
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    initialValue: settings.eqPreset,
-                    decoration: const InputDecoration(labelText: 'Preset'),
-                    items: [
-                      for (final preset in EqPresets.all)
-                        DropdownMenuItem(
-                          value: preset.id,
-                          child: Text(preset.label),
-                        ),
-                    ],
-                    onChanged: (id) {
-                      if (id == null) return;
-                      final preset = EqPresets.byId(id);
-                      if (preset == null) return;
-                      notifier.update(
-                        settings.copyWith(
-                          eqPreset: id,
-                          eqBands: preset.apply(),
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  Text('Bands', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 4),
-                  for (var i = 0; i < settings.eqBands.length; i++)
-                    SettingSliderTile(
-                      title: _bandLabel(settings.eqBands[i].frequency),
-                      value: settings.eqBands[i].gain,
-                      min: -12,
-                      max: 12,
-                      divisions: 24,
-                      valueLabel: (v) =>
-                          '${v > 0 ? '+' : ''}${v.toStringAsFixed(0)} dB',
-                      description: null,
-                      onChanged: (v) {
-                        final bands = List<EqBand>.of(settings.eqBands);
-                        bands[i] = bands[i].copyWith(gain: v);
-                        notifier.update(
-                          settings.copyWith(eqPreset: 'custom', eqBands: bands),
-                        );
-                      },
-                    ),
-                ],
-              ],
-            ),
-          ),
+          const EqualizerCard(),
           const SizedBox(height: 12),
 
           // ---- Crossfade / automix --------------------------------------
@@ -234,6 +174,46 @@ class SettingsPage extends ConsumerWidget {
                   value: settings.prefetchNextTrack,
                   onChanged: (v) =>
                       notifier.update(settings.copyWith(prefetchNextTrack: v)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // ---- Audio quality ---------------------------------------------
+          GandarCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Audio quality',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                SegmentedButton<AudioQuality>(
+                  segments: const [
+                    ButtonSegment(
+                      value: AudioQuality.dataSaver,
+                      label: Text('Data saver'),
+                    ),
+                    ButtonSegment(
+                      value: AudioQuality.balanced,
+                      label: Text('Balanced'),
+                    ),
+                    ButtonSegment(
+                      value: AudioQuality.best,
+                      label: Text('Best'),
+                    ),
+                  ],
+                  selected: {settings.audioQuality},
+                  onSelectionChanged: (selection) => notifier.update(
+                    settings.copyWith(audioQuality: selection.first),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _qualityDescription(settings.audioQuality),
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),
@@ -366,12 +346,18 @@ class SettingsPage extends ConsumerWidget {
     );
   }
 
-  static String _bandLabel(double frequency) {
-    if (frequency >= 1000) {
-      return '${(frequency / 1000).toStringAsFixed(0)} kHz';
-    }
-    return '${frequency.toStringAsFixed(0)} Hz';
-  }
+  /// What each quality level actually does to the stream that is fetched.
+  static String _qualityDescription(AudioQuality quality) => switch (quality) {
+    AudioQuality.dataSaver =>
+      'Downloads the smallest stream YouTube publishes. Audible on good '
+          'headphones, and the lightest on a metered connection.',
+    AudioQuality.balanced =>
+      'The best m4a stream for each track: widely decodable, and roughly what '
+          'a Spotify Premium stream is.',
+    AudioQuality.best =>
+      'The highest-bitrate stream available, including formats the m4a streams '
+          'cap below. Largest download, and the cache fills fastest.',
+  };
 
   static String _describeFilters(PlaybackSettings s) {
     final parts = <String>[];

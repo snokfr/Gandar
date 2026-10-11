@@ -8,7 +8,9 @@ import '../core/theme/theme_presets.dart';
 import '../core/theme/theme_tokens.dart';
 import '../data/artwork/artwork_enricher.dart';
 import '../data/artwork/artwork_lookup.dart';
+import '../data/feed/artist_feed.dart';
 import '../data/import/library_file_import.dart';
+import '../data/lyrics/lyrics_source.dart';
 import '../data/net/request_gate.dart';
 import '../data/spotify/spotify_public.dart';
 import '../data/spotify/spotify_public_web.dart';
@@ -212,6 +214,10 @@ final localTrackSearchProvider = FutureProvider.family<List<Track>, String>((
   final trimmed = query.trim().toLowerCase();
   if (trimmed.length < kMinSearchLength) return const <Track>[];
   final tracks = await ref.watch(likedTracksProvider.future);
+  // No result cap. There used to be a `take(50)` here, which quietly hid the
+  // rest of a 2,000-song library from a search that had actually matched it,
+  // and made "play all" mean "play the first fifty". The list is virtualised
+  // where it is shown, so the count costs nothing.
   return tracks
       .where(
         (t) =>
@@ -219,7 +225,6 @@ final localTrackSearchProvider = FutureProvider.family<List<Track>, String>((
             t.artists.any((a) => a.toLowerCase().contains(trimmed)) ||
             (t.album?.toLowerCase().contains(trimmed) ?? false),
       )
-      .take(50)
       .toList(growable: false);
 });
 
@@ -234,6 +239,77 @@ final localPlaylistSearchProvider =
           .toList(growable: false);
     });
 
+/// The artists this library actually listens to, most-played first.
+///
+/// Ranked by play history rather than by how many songs are filed under a name,
+/// because the feed answers "what is new from the music I play" — an artist with
+/// one song that gets played daily belongs at the top, and a 40-track album that
+/// was imported and never opened does not.
+///
+/// A library with no history yet falls back to the artists it holds, in library
+/// order, so the tab has something to show on day one.
+final topArtistsProvider = FutureProvider<List<String>>((ref) async {
+  final tracks = await ref.watch(likedTracksProvider.future);
+  if (tracks.isEmpty) return const <String>[];
+
+  final byId = <String, Track>{for (final track in tracks) track.id: track};
+  final records = await ref
+      .watch(appDependenciesProvider)
+      .libraryRepository
+      .playHistory();
+
+  final counts = <String, int>{};
+  for (final record in records) {
+    final artist = byId[record.trackId]?.primaryArtist.trim() ?? '';
+    if (artist.isEmpty) continue;
+    counts[artist] = (counts[artist] ?? 0) + 1;
+  }
+
+  if (counts.isEmpty) {
+    final seen = <String>[];
+    final lowered = <String>{};
+    for (final track in tracks) {
+      final artist = track.primaryArtist.trim();
+      if (artist.isEmpty || !lowered.add(artist.toLowerCase())) continue;
+      seen.add(artist);
+    }
+    return List<String>.unmodifiable(seen);
+  }
+
+  final ranked = counts.entries.toList()
+    ..sort((a, b) {
+      final byCount = b.value.compareTo(a.value);
+      if (byCount != 0) return byCount;
+      return a.key.toLowerCase().compareTo(b.key.toLowerCase());
+    });
+  return List<String>.unmodifiable(<String>[for (final e in ranked) e.key]);
+});
+
+/// One service for the session, so the artist -> channel lookups it discovers
+/// are reused instead of being re-searched every time the tab is opened.
+final artistFeedServiceProvider = Provider<ArtistFeed>(
+  (ref) => ArtistFeed(),
+);
+
+/// The newest uploads from the artists this library listens to.
+final artistFeedProvider = FutureProvider<List<FeedVideo>>((ref) async {
+  final artists = await ref.watch(topArtistsProvider.future);
+  if (artists.isEmpty) return const <FeedVideo>[];
+  return ref.watch(artistFeedServiceProvider).latestFor(artists);
+});
+
+/// Looks lyrics up by track. Free and keyless, so there is nothing to configure.
+final lyricsSourceProvider = Provider<LyricsSource>((ref) => LrcLibLyrics());
+
+/// Lyrics for one track, cached per track for the life of the app session.
+///
+/// Keyed by the whole [Track] because the lookup needs the title, artist and
+/// duration, not just the id. A null result means "the source has none", which
+/// is a normal answer and is rendered as such.
+final lyricsProvider = FutureProvider.family<Lyrics?, Track>(
+  (ref, track) => ref.watch(lyricsSourceProvider).lookup(track),
+);
+
 /// Lifetime listening stats for the savings view.
 ///
 /// Re-reads the play history whenever playback settings change, because the
@@ -244,8 +320,12 @@ final listeningStatsProvider = FutureProvider<ListeningStats>((ref) async {
   final records = await deps.libraryRepository.playHistory();
   return ListeningStats.from(
     records: records,
-    adSecondsPerTrack: settings.savingsAdSecondsPerTrack,
     premiumMonthlyCost: settings.savingsPremiumMonthlyCost,
+    adBreakMinutes: settings.savingsAdBreakMinutes,
+    adSeconds: settings.savingsAdSeconds,
+    adsPerBreak: settings.savingsAdsPerBreak,
+    adsCpm: settings.savingsAdsCpm,
+    artistPayoutPerStream: settings.savingsArtistPayoutPerStream,
   );
 });
 

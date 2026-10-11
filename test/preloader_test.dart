@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gandar/core/settings/playback_settings.dart';
 import 'package:gandar/domain/models/resolved_stream.dart';
 import 'package:gandar/domain/models/track.dart';
 import 'package:gandar/domain/repositories/repositories.dart';
@@ -16,6 +17,9 @@ class CountingResolver implements AudioResolver {
   final Map<String, int> calls = {};
   final List<String> order = [];
   Completer<void>? gate;
+
+  @override
+  void setAudioQuality(AudioQuality quality) {}
 
   @override
   Future<ResolvedStream> resolve(Track track) async {

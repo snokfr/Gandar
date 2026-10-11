@@ -201,9 +201,139 @@ class DriftLibraryRepository implements LibraryRepository {
             artworkUrl: r.artworkUrl,
             ownerName: r.ownerName,
             isCollaborative: r.isCollaborative,
+            isLocal: r.isLocal,
           ),
         )
         .toList(growable: false);
+  }
+
+  @override
+  Future<Playlist> createPlaylist(String name) async {
+    final clean = name.trim().isEmpty ? 'New playlist' : name.trim();
+    final now = DateTime.now();
+    // A plain, URL-safe id. It becomes a path segment (`/playlists/<id>`), so a
+    // colon would have to be escaped on every navigation; a `local-` prefix
+    // keeps it recognisable and makes a collision with Spotify's 22-character
+    // ids impossible by construction.
+    final id = '${Playlist.localPrefix}${now.microsecondsSinceEpoch}';
+    await _db.into(_db.playlists).insert(
+      PlaylistsCompanion.insert(
+        id: id,
+        name: clean,
+        cachedAt: now,
+        isLocal: const Value(true),
+      ),
+    );
+    return Playlist(id: id, name: clean, isLocal: true);
+  }
+
+  @override
+  Future<void> renamePlaylist(String playlistId, String name) async {
+    final clean = name.trim();
+    if (clean.isEmpty) return;
+    await (_db.update(
+      _db.playlists,
+    )..where((t) => t.id.equals(playlistId))).write(
+      PlaylistsCompanion(name: Value(clean), cachedAt: Value(DateTime.now())),
+    );
+  }
+
+  @override
+  Future<void> deletePlaylist(String playlistId) async {
+    // Only the membership rows go. A playlist is a view over the library, so
+    // deleting one must leave every track it pointed at exactly where it was.
+    await _db.transaction(() async {
+      await (_db.delete(
+        _db.playlistTracks,
+      )..where((t) => t.playlistId.equals(playlistId))).go();
+      await (_db.delete(
+        _db.playlists,
+      )..where((t) => t.id.equals(playlistId))).go();
+    });
+  }
+
+  @override
+  Future<bool> addTrackToPlaylist(String playlistId, String trackId) async {
+    final existing =
+        await (_db.select(_db.playlistTracks)..where(
+              (t) =>
+                  t.playlistId.equals(playlistId) & t.trackId.equals(trackId),
+            ))
+            .getSingleOrNull();
+    if (existing != null) return false;
+
+    final now = DateTime.now();
+    await _db.transaction(() async {
+      final current = await (_db.select(
+        _db.playlistTracks,
+      )..where((t) => t.playlistId.equals(playlistId))).get();
+      // Append past the highest position rather than using `length`, so a
+      // playlist whose positions have gaps (after a removal) still appends at
+      // the end instead of overwriting a row's position.
+      final next = current.fold<int>(-1, (max, row) {
+        return row.position > max ? row.position : max;
+      });
+      await _db
+          .into(_db.playlistTracks)
+          .insert(
+            PlaylistTracksCompanion.insert(
+              playlistId: playlistId,
+              trackId: trackId,
+              position: next + 1,
+              cachedAt: now,
+            ),
+          );
+      await (_db.update(
+        _db.playlists,
+      )..where((t) => t.id.equals(playlistId))).write(
+        PlaylistsCompanion(
+          trackCount: Value(current.length + 1),
+          cachedAt: Value(now),
+        ),
+      );
+    });
+    return true;
+  }
+
+  @override
+  Future<void> removeTrackFromPlaylist(
+    String playlistId,
+    String trackId,
+  ) async {
+    await _db.transaction(() async {
+      await (_db.delete(_db.playlistTracks)..where(
+            (t) =>
+                t.playlistId.equals(playlistId) & t.trackId.equals(trackId),
+          ))
+          .go();
+
+      // Renumber what is left so positions stay contiguous. The order query
+      // sorts by position, so a gap is harmless to read but would let a later
+      // append land in the middle.
+      final rows =
+          await (_db.select(_db.playlistTracks)
+                ..where((t) => t.playlistId.equals(playlistId))
+                ..orderBy([(t) => OrderingTerm.asc(t.position)]))
+              .get();
+      for (var i = 0; i < rows.length; i++) {
+        if (rows[i].position == i) continue;
+        await (_db.update(_db.playlistTracks)..where(
+              (t) =>
+                  t.playlistId.equals(playlistId) &
+                  t.trackId.equals(rows[i].trackId),
+            ))
+            .write(PlaylistTracksCompanion(position: Value(i)));
+      }
+
+      await (_db.update(
+        _db.playlists,
+      )..where((t) => t.id.equals(playlistId))).write(
+        PlaylistsCompanion(
+          trackCount: Value(rows.length),
+          cachedAt: Value(DateTime.now()),
+        ),
+      );
+    });
   }
 
   @override
@@ -266,6 +396,29 @@ class DriftLibraryRepository implements LibraryRepository {
               ..limit(limit))
             .get();
     return rows.map(_rowToTrack).toList(growable: false);
+  }
+
+  /// The first stored cover for a track on [album].
+  ///
+  /// Album names are matched exactly, which is deliberate: it is the same rule
+  /// [Album.group] uses to build the Albums tab, so a cover the enricher
+  /// borrows here is one the album view would have shown anyway.
+  @override
+  Future<String?> cachedArtworkForAlbum(String album) async {
+    final name = album.trim();
+    if (name.isEmpty) return null;
+    // Bounded: an album with no cover is not worth scanning the whole table
+    // for, and any of the first rows with a cover is as good as another.
+    final rows =
+        await (_db.select(_db.tracks)
+              ..where((t) => t.album.equals(name) & t.artworkUrl.isNotNull())
+              ..limit(20))
+            .get();
+    for (final row in rows) {
+      final url = row.artworkUrl;
+      if (url != null && url.isNotEmpty) return url;
+    }
+    return null;
   }
 
   /// Play history joined with cached durations, oldest first.

@@ -276,6 +276,47 @@ class SettingSliderTile extends StatelessWidget {
   }
 }
 
+/// Asks for a single line of text. Returns null when cancelled or left blank.
+///
+/// Shared rather than local to one screen: naming a playlist and naming an
+/// equalizer preset are the same question, and answering it two ways would give
+/// two slightly different dialogs.
+Future<String?> promptForName(
+  BuildContext context, {
+  required String title,
+  required String action,
+  String initial = '',
+  String? hint,
+}) async {
+  final controller = TextEditingController(text: initial);
+  final result = await showDialog<String>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(title),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        textCapitalization: TextCapitalization.sentences,
+        decoration: InputDecoration(labelText: 'Name', hintText: hint),
+        onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+          child: Text(action),
+        ),
+      ],
+    ),
+  );
+  controller.dispose();
+  final trimmed = result?.trim();
+  return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+}
+
 /// Centered empty/error placeholder.
 ///
 /// Scrolls rather than overflows when the copy is long or the window is small,

@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/motion/motion.dart';
 import '../../core/settings/playback_settings.dart';
 import '../../core/theme/theme_engine.dart';
+import '../../domain/models/track.dart';
 import '../../state/playback_controller.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
+import 'share_links.dart';
 
 /// Formats a duration as `m:ss` (or `h:mm:ss` for long media).
 String formatDuration(Duration d) {
@@ -259,6 +262,13 @@ class PlayerBar extends ConsumerWidget {
                       ),
                     ),
                     IconButton(
+                      tooltip: 'Share',
+                      onPressed: track == null
+                          ? null
+                          : () => showShareSheet(context, ref, track),
+                      icon: const Icon(Icons.ios_share),
+                    ),
+                    IconButton(
                       tooltip: 'Now playing',
                       onPressed: () => openNowPlaying(context),
                       icon: const Icon(Icons.keyboard_arrow_up),
@@ -379,7 +389,103 @@ Future<void> openNowPlaying(BuildContext context) {
   );
 }
 
-/// Full-screen player with artwork, seek bar and transport.
+/// Offers every place [track] can be shared to, and copies the chosen link.
+///
+/// Both services are always offered. A track imported from Spotify usually has
+/// no YouTube video resolved yet, and a track found on YouTube has no Spotify
+/// id at all; in either case the row becomes a search link rather than a
+/// disabled button. The cached Spotify -> YouTube mapping is consulted first,
+/// which is a local read, so an exact YouTube link is available for virtually
+/// everything that has ever been played.
+Future<void> showShareSheet(
+  BuildContext context,
+  WidgetRef ref,
+  Track track,
+) async {
+  String? mapped;
+  try {
+    mapped = await ref
+        .read(appDependenciesProvider)
+        .mappingRepository
+        .findVideoId(track.id);
+  } catch (_) {
+    // A mapping lookup is an optimisation here, never a reason to fail.
+    mapped = null;
+  }
+  if (!context.mounted) return;
+
+  final links = ShareLinks.forTrack(track, youtubeVideoId: mapped);
+  final messenger = ScaffoldMessenger.of(context);
+  final theme = Theme.of(context);
+
+  await showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: AlbumArt(url: track.artworkUrl, size: 44),
+            title: Text(
+              track.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              track.artists.join(', '),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const Divider(height: 1),
+          for (final link in links)
+            ListTile(
+              leading: Icon(
+                link.source == 'youtube'
+                    ? Icons.smart_display_outlined
+                    : Icons.graphic_eq,
+              ),
+              title: Text('Copy ${link.label} link'),
+              subtitle: Text(
+                link.url,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
+              ),
+              onTap: () async {
+                await Clipboard.setData(ClipboardData(text: link.url));
+                if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+                messenger.showSnackBar(
+                  SnackBar(content: Text('Copied the ${link.label} link.')),
+                );
+              },
+            ),
+          ListTile(
+            leading: const Icon(Icons.copy_all_outlined),
+            title: const Text('Copy as text'),
+            subtitle: Text(
+              'The artist, title and every link in one paste',
+              style: theme.textTheme.bodySmall,
+            ),
+            onTap: () async {
+              await Clipboard.setData(
+                ClipboardData(text: ShareLinks.asText(track, links)),
+              );
+              if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+              messenger.showSnackBar(
+                const SnackBar(content: Text('Copied the track and its links.')),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    ),
+  );
+}
+
+/// Full-screen player: artwork, transport, lyrics and the whole queue.
 class NowPlayingSheet extends ConsumerWidget {
   const NowPlayingSheet({super.key});
 
@@ -390,6 +496,7 @@ class NowPlayingSheet extends ConsumerWidget {
     return PlaybackScope(
       builder: (context, controller) {
         final track = controller.currentTrack;
+        final queue = controller.queue;
         return DraggableScrollableSheet(
           initialChildSize: 0.92,
           minChildSize: 0.5,
@@ -403,88 +510,125 @@ class NowPlayingSheet extends ConsumerWidget {
                   top: Radius.circular(tokens.radiusLg),
                 ),
               ),
-              child: ListView(
+              // Slivers rather than a ListView of children: the queue can hold
+              // thousands of tracks, and building every row to show eight of
+              // them is exactly the kind of waste that shows up as a stutter.
+              child: CustomScrollView(
                 controller: scrollController,
-                padding: const EdgeInsets.all(24),
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: tokens.borderColor,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 4),
+                    sliver: SliverList(
+                      delegate: SliverChildListDelegate(<Widget>[
+                        Center(
+                          child: Container(
+                            width: 40,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: tokens.borderColor,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        if (track == null)
+                          const EmptyState(
+                            icon: Icons.music_note,
+                            title: 'Nothing playing',
+                          )
+                        else ...[
+                          Center(
+                            child: AlbumArt(
+                              url: track.artworkUrl,
+                              size: 280,
+                              radius: tokens.radiusLg,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          Text(
+                            track.title,
+                            style: Theme.of(context).textTheme.headlineMedium,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            track.artists.join(', '),
+                            style: Theme.of(context).textTheme.bodyMedium,
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 10),
+                          Center(
+                            child: OutlinedButton.icon(
+                              onPressed: () =>
+                                  showShareSheet(context, ref, track),
+                              icon: const Icon(Icons.ios_share, size: 18),
+                              label: const Text('Share'),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          AnimatedSwitcher(
+                            duration: reduceMotion
+                                ? const Duration(milliseconds: 120)
+                                : const Duration(milliseconds: 220),
+                            child: _SeekBar(
+                              key: ValueKey(track.id),
+                              controller: controller,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          _TransportControls(
+                            controller: controller,
+                            iconSize: 34,
+                          ),
+                          const SizedBox(height: 20),
+                          if (controller.errorMessage != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Text(
+                                controller.errorMessage!,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          _LyricsSection(track: track),
+                          const SizedBox(height: 12),
+                        ],
+                      ]),
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  if (track == null)
-                    const EmptyState(
-                      icon: Icons.music_note,
-                      title: 'Nothing playing',
-                    )
-                  else ...[
-                    Center(
-                      child: AlbumArt(
-                        url: track.artworkUrl,
-                        size: 280,
-                        radius: tokens.radiusLg,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      track.title,
-                      style: Theme.of(context).textTheme.headlineMedium,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      track.artists.join(', '),
-                      style: Theme.of(context).textTheme.bodyMedium,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 20),
-                    AnimatedSwitcher(
-                      duration: reduceMotion
-                          ? const Duration(milliseconds: 120)
-                          : const Duration(milliseconds: 220),
-                      child: _SeekBar(
-                        key: ValueKey(track.id),
-                        controller: controller,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    _TransportControls(controller: controller, iconSize: 34),
-                    const SizedBox(height: 20),
-                    if (controller.errorMessage != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Text(
-                          controller.errorMessage!,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                          textAlign: TextAlign.center,
+                  if (track != null && queue.isNotEmpty) ...[
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 4),
+                      sliver: SliverToBoxAdapter(
+                        child: SectionHeader(
+                          title: 'Up next',
+                          subtitle: queue.length == 1
+                              ? 'just this track — it was played on its own'
+                              : '${queue.length} tracks · tap any to jump',
                         ),
                       ),
-                    if (controller.queue.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      SectionHeader(
-                        title: 'Up next',
-                        subtitle: '${controller.queue.length} tracks',
+                    ),
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      sliver: SliverList.builder(
+                        itemCount: queue.length,
+                        itemBuilder: (context, index) {
+                          final queued = queue[index];
+                          return TrackTile(
+                            track: queued,
+                            dense: true,
+                            isCurrent: queued.id == track.id,
+                            onTap: () => controller.jumpTo(queued.id),
+                          );
+                        },
                       ),
-                      const SizedBox(height: 8),
-                      for (final t in controller.queue.take(50))
-                        TrackTile(
-                          track: t,
-                          dense: true,
-                          isCurrent: t.id == track.id,
-                          onTap: () {},
-                        ),
-                    ],
+                    ),
                   ],
+                  const SliverToBoxAdapter(child: SizedBox(height: 32)),
                 ],
               ),
             );
@@ -492,5 +636,60 @@ class NowPlayingSheet extends ConsumerWidget {
         );
       },
     );
+  }
+}
+
+/// The words to the current track, from LRCLIB (no account, no key).
+///
+/// A missing lyric is not an error: most of a large library will not have one,
+/// and the section says so in a sentence instead of an empty box.
+class _LyricsSection extends ConsumerWidget {
+  const _LyricsSection({required this.track});
+
+  final Track track;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return ref
+        .watch(lyricsProvider(track))
+        .when(
+          loading: () => const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
+          error: (error, _) => Text(
+            'Could not load lyrics: $error',
+            style: theme.textTheme.bodySmall,
+          ),
+          data: (lyrics) {
+            if (lyrics == null || lyrics.isEmpty) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SectionHeader(title: 'Lyrics'),
+                  const SizedBox(height: 6),
+                  Text(
+                    lyrics?.instrumental ?? false
+                        ? 'This track is instrumental.'
+                        : 'No lyrics found for this track.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SectionHeader(title: 'Lyrics', subtitle: lyrics.attribution),
+                const SizedBox(height: 8),
+                SelectableText(
+                  lyrics.plain,
+                  style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+                ),
+              ],
+            );
+          },
+        );
   }
 }

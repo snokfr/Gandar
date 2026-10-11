@@ -34,6 +34,9 @@ class _NoopResolver implements AudioResolver {
   const _NoopResolver();
 
   @override
+  void setAudioQuality(AudioQuality quality) {}
+
+  @override
   Future<ResolvedStream> resolve(Track track) async =>
       throw StateError('no audio expected in import tests');
 }

@@ -8,10 +8,15 @@ import 'package:gandar/domain/repositories/repositories.dart';
 
 /// A source that answers from a fixed map, and counts what it was asked.
 class _FakeSource implements ArtworkSource {
-  _FakeSource(this.covers);
+  _FakeSource(this.covers, {this.albumCovers = const <String, String?>{}});
 
   final Map<String, String?> covers;
+
+  /// Album covers, keyed by `artist album`.
+  final Map<String, String?> albumCovers;
+
   final List<String> asked = <String>[];
+  final List<String> askedAlbums = <String>[];
 
   @override
   Future<String?> artworkFor(Track track) async {
@@ -21,12 +26,39 @@ class _FakeSource implements ArtworkSource {
     }
     return null;
   }
+
+  @override
+  Future<String?> albumArtworkFor({
+    required String album,
+    required String artist,
+  }) async {
+    final key = '$artist $album';
+    askedAlbums.add(key);
+    return albumCovers[key];
+  }
 }
 
 class _FakeLibrary implements LibraryRepository {
-  _FakeLibrary(this.tracks);
+  _FakeLibrary(this.tracks, {this.siblingArtwork = true});
 
   List<Track> tracks;
+
+  /// Whether an album mate's cover is visible to the pass. Off models a
+  /// library where nothing on the album has a cover yet.
+  final bool siblingArtwork;
+
+  @override
+  Future<String?> cachedArtworkForAlbum(String album) async {
+    if (!siblingArtwork) return null;
+    for (final track in tracks) {
+      if (track.album == album &&
+          track.artworkUrl != null &&
+          track.artworkUrl!.isNotEmpty) {
+        return track.artworkUrl;
+      }
+    }
+    return null;
+  }
 
   @override
   Future<List<Track>> tracksMissingArtwork({int limit = 500}) async => tracks
@@ -62,6 +94,29 @@ class _FakeLibrary implements LibraryRepository {
 
   @override
   Future<List<Track>> cachedPlaylistTracks(String playlistId) async => const [];
+
+  @override
+  Future<Playlist> createPlaylist(String name) async => Playlist(
+    id: '${Playlist.localPrefix}0',
+    name: name,
+    isLocal: true,
+  );
+
+  @override
+  Future<void> renamePlaylist(String playlistId, String name) async {}
+
+  @override
+  Future<void> deletePlaylist(String playlistId) async {}
+
+  @override
+  Future<bool> addTrackToPlaylist(String playlistId, String trackId) async =>
+      true;
+
+  @override
+  Future<void> removeTrackFromPlaylist(
+    String playlistId,
+    String trackId,
+  ) async {}
 
   @override
   Future<void> recordPlay(String trackId, DateTime at) async {}
@@ -200,6 +255,101 @@ void main() {
       expect(library.tracks.where((t) => t.artworkUrl != null), hasLength(1));
     });
 
+    test('a track with no cover inherits its album mate\'s', () async {
+      final library = _FakeLibrary(<Track>[
+        Track(
+          id: 'a',
+          title: 'Cold Water',
+          artists: const <String>['Major Lazer'],
+          album: 'Cold Water',
+        ),
+        Track(
+          id: 'b',
+          title: 'Cold Water (Remix)',
+          artists: const <String>['Major Lazer'],
+          album: 'Cold Water',
+        ),
+      ]);
+      // The catalogue knows the track but not the remix. The remix should not
+      // even be asked about it: the album mate's cover already answers it.
+      final source = _FakeSource(<String, String?>{
+        'Major Lazer Cold Water': 'https://art/track.jpg',
+      });
+
+      final result = await ArtworkEnricher(
+        library: library,
+        source: source,
+      ).run();
+
+      expect(result.updated, 2);
+      expect(result.missing, 0);
+      expect(library.tracks[0].artworkUrl, 'https://art/track.jpg');
+      expect(library.tracks[1].artworkUrl, 'https://art/track.jpg');
+      expect(source.askedAlbums, isEmpty);
+    });
+
+    test('falls back to the album cover when nothing else has one', () async {
+      final library = _FakeLibrary(
+        <Track>[
+          Track(
+            id: 'a',
+            title: 'B-Side No One Indexed',
+            artists: const <String>['An Artist'],
+            album: 'An Album',
+          ),
+        ],
+        siblingArtwork: false,
+      );
+      final source = _FakeSource(
+        const <String, String?>{},
+        albumCovers: <String, String?>{
+          'An Artist An Album': 'https://art/album.jpg',
+        },
+      );
+
+      final result = await ArtworkEnricher(
+        library: library,
+        source: source,
+      ).run();
+
+      // The point of the fallback: a track the catalogue has never heard of
+      // still gets the picture it is filed under, instead of a blank square.
+      expect(result.updated, 1);
+      expect(result.missing, 0);
+      expect(library.tracks.single.artworkUrl, 'https://art/album.jpg');
+    });
+
+    test('asks for an album cover once, not once per track', () async {
+      final library = _FakeLibrary(
+        <Track>[
+          Track(
+            id: 'a',
+            title: 'One',
+            artists: const <String>['An Artist'],
+            album: 'An Album',
+          ),
+          Track(
+            id: 'b',
+            title: 'Two',
+            artists: const <String>['An Artist'],
+            album: 'An Album',
+          ),
+        ],
+        siblingArtwork: false,
+      );
+      final source = _FakeSource(
+        const <String, String?>{},
+        albumCovers: <String, String?>{
+          'An Artist An Album': 'https://art/album.jpg',
+        },
+      );
+
+      await ArtworkEnricher(library: library, source: source).run();
+
+      expect(source.askedAlbums, hasLength(1));
+      expect(library.tracks.every((t) => t.artworkUrl == 'https://art/album.jpg'), isTrue);
+    });
+
     test('a source that throws is a missing cover, not a crash', () async {
       final library = _FakeLibrary(<Track>[_track('Boom')]);
       final result = await ArtworkEnricher(
@@ -216,4 +366,10 @@ void main() {
 class _ExplodingSource implements ArtworkSource {
   @override
   Future<String?> artworkFor(Track track) async => throw StateError('nope');
+
+  @override
+  Future<String?> albumArtworkFor({
+    required String album,
+    required String artist,
+  }) async => throw StateError('nope');
 }

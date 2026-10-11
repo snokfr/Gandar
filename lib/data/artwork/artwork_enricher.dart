@@ -53,7 +53,9 @@ class ArtworkProgress {
 ///
 /// This is the "port a lot of stuff over at a time" half of importing: a
 /// playlist gives titles and artists in one request, and the covers arrive
-/// afterwards, one polite request at a time.
+/// afterwards, one polite request at a time. Each track gets the best cover
+/// available to it — see [_coverFor], which borrows an album's cover rather
+/// than giving up when a track has no artwork of its own.
 ///
 /// Three properties matter more than speed here:
 ///
@@ -82,6 +84,60 @@ class ArtworkEnricher {
 
   /// Asks the running pass to finish the current request and stop.
   void stop() => _stopRequested = true;
+
+  /// The best cover available for [track], trying the cheapest answer first.
+  ///
+  /// Three rungs, in order:
+  ///
+  /// 1. **A sibling on the same album** that already has a cover. A local
+  ///    database read — instant, offline and almost always right, since an
+  ///    imported album's tracks share one image.
+  /// 2. **The track's own cover**, from the catalogue.
+  /// 3. **The album's cover.** This is the case the per-track search has no
+  ///    answer for: compilations, tracks whose title carries a feature suffix
+  ///    the catalogue does not use, and anything never released under its own
+  ///    name. Rather than leave a blank square, the row gets the picture it is
+  ///    filed under.
+  ///
+  /// Steps 1 and 3 are what make a large import stop producing empty tiles:
+  /// one cover is fetched and the rest of the album inherits it.
+  Future<String?> _coverFor(Track track, Map<String, String?> albumCache) async {
+    final album = track.album?.trim() ?? '';
+
+    if (album.isNotEmpty) {
+      try {
+        final sibling = await library.cachedArtworkForAlbum(album);
+        if (sibling != null && sibling.isNotEmpty) return sibling;
+      } catch (e) {
+        AppLogger.instance.debug(
+          'artwork',
+          'sibling lookup failed for "$album": $e',
+        );
+      }
+    }
+
+    try {
+      final own = await source.artworkFor(track);
+      if (own != null && own.isNotEmpty) return own;
+    } catch (e) {
+      AppLogger.instance.debug('artwork', 'lookup threw for ${track.id}: $e');
+    }
+
+    if (album.isEmpty) return null;
+    if (albumCache.containsKey(album)) return albumCache[album];
+
+    String? cover;
+    try {
+      cover = await source.albumArtworkFor(
+        album: album,
+        artist: track.primaryArtist,
+      );
+    } catch (e) {
+      AppLogger.instance.debug('artwork', 'album lookup threw for "$album": $e');
+    }
+    albumCache[album] = cover;
+    return cover;
+  }
 
   /// Runs one pass, reporting progress as it goes.
   ///
@@ -120,14 +176,14 @@ class ArtworkEnricher {
       'pass starting: ${pending.length} tracks need artwork',
     );
 
+    // Album covers, resolved at most once per album per pass. A key present
+    // with a null value means "asked, and the catalogue had nothing", which is
+    // worth remembering so forty tracks of one album do not ask forty times.
+    final albumCache = <String, String?>{};
+
     for (final track in pending) {
       if (_stopRequested) break;
-      String? url;
-      try {
-        url = await source.artworkFor(track);
-      } catch (e) {
-        AppLogger.instance.debug('artwork', 'lookup threw for ${track.id}: $e');
-      }
+      final url = await _coverFor(track, albumCache);
 
       if (url != null && url.isNotEmpty) {
         try {

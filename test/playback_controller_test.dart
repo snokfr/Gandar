@@ -18,6 +18,12 @@ class StubResolver implements AudioResolver {
   final Set<String> failFor;
   final List<String> resolved = [];
 
+  /// The quality the controller last pushed in, for assertions.
+  final List<AudioQuality> qualities = [];
+
+  @override
+  void setAudioQuality(AudioQuality quality) => qualities.add(quality);
+
   @override
   Future<ResolvedStream> resolve(Track track) async {
     resolved.add(track.id);
@@ -72,7 +78,33 @@ class FakeLibrary implements LibraryRepository {
   Future<List<Track>> cachedPlaylistTracks(String playlistId) async => const [];
 
   @override
+  Future<Playlist> createPlaylist(String name) async => Playlist(
+    id: '${Playlist.localPrefix}0',
+    name: name,
+    isLocal: true,
+  );
+
+  @override
+  Future<void> renamePlaylist(String playlistId, String name) async {}
+
+  @override
+  Future<void> deletePlaylist(String playlistId) async {}
+
+  @override
+  Future<bool> addTrackToPlaylist(String playlistId, String trackId) async =>
+      true;
+
+  @override
+  Future<void> removeTrackFromPlaylist(
+    String playlistId,
+    String trackId,
+  ) async {}
+
+  @override
   Future<List<Track>> tracksMissingArtwork({int limit = 500}) async => const [];
+
+  @override
+  Future<String?> cachedArtworkForAlbum(String album) async => null;
 }
 
 void main() {

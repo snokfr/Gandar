@@ -36,14 +36,36 @@ Metadata comes from Spotify; the audio never does.
   pasting its link. No account, no client id, no Premium.
 - Everything is stored locally in SQLite, so the library, the playlists and
   your play history work offline.
+- **Make your own playlists** and add songs to them from a picker that stays
+  open while you build the list. **Delete any playlist** — including imported
+  ones — and rename any of them. Deleting a playlist never deletes the music:
+  a playlist is a view over the library, never the library itself.
+- **Albums**, grouped from the album names your import carries.
 - Remove tracks you no longer want with one click.
-- Virtualized lists, so a library of thousands of tracks scrolls smoothly.
+- Virtualized lists everywhere, so a library of thousands of tracks — or a
+  queue of 1,787 — scrolls without building a single row you cannot see.
+
+**Player**
+
+- **Lyrics** for the current track, from [LRCLIB](https://lrclib.net) — free,
+  open and keyless, with time-synced lyrics reduced to plain text. A missing
+  lyric is reported as a sentence, not an empty box.
+- **Share** any track as a YouTube or a Spotify link, whichever service knows
+  it. A track that came from Spotify also offers its resolved YouTube video,
+  because that mapping is already stored locally. Every list row is
+  right-clickable for the same menu.
+- **The whole queue is visible and tappable**, so any track in it can be jumped
+  to directly.
 
 **Advanced playback settings** — modeled on Spotify's playback menu
 
-- 10-band equalizer with 13 presets (Flat, Bass Boost, Rock, Pop, Classical,
+- **Interactive 10-band equalizer**: drag the curve instead of nudging ten
+  sliders. It ships with 13 presets (Flat, Bass Boost, Rock, Pop, Classical,
   Jazz, Hip-Hop, Dance, Electronic, Acoustic, Loudness, Vocal, Bass Reducer)
-  and per-band custom gain (`-12 … +12 dB`).
+  and you can **save your own presets by name** — the curve is saved with them
+  and kept in your settings.
+- **Audio quality per track** — *Data saver*, *Balanced* or *Best* — which
+  decides which of YouTube's several published audio streams is fetched.
 - Crossfade from `0` to `12` seconds, plus an Automix toggle for smoother
   transitions.
 - Volume normalization (EBU R128 `loudnorm`) with Quiet / Normal / Loud
@@ -62,8 +84,40 @@ Metadata comes from Spotify; the audio never does.
   colour and corner radius. Import it and the whole app restyles instantly — no
   code, no rebuild. See [docs/styling.md](docs/styling.md) and the ready-made
   files in [examples/themes/](examples/themes).
-- Quick customization of the accent colour and corner radius from inside the
-  app; custom themes are saved and selectable.
+- **A live theme editor.** Every colour in the token set and all three corner
+  radii are editable in the app, with a colour picker (swatches, hex, RGB) and
+  the whole app repainting as you change things. Editing a built-in preset
+  saves a copy, so the presets stay pristine, and any theme can be saved under
+  a name of its own.
+
+**Feed**
+
+- A **Feed** tab listing recent uploads from the artists you actually listen
+  to — ranked by play history, not by how many songs are filed under a name.
+  Tapping any entry plays the feed as a queue starting there.
+- It reads each artist's **public YouTube channel feed**, which needs no
+  account. Finding the channel is a search, so the channel behind a name is a
+  labelled best guess, and the whole list is best-effort by construction.
+
+**Mashup**
+
+- A **Mashup** tab that blends two or more tracks into one continuous set:
+  pick the songs, choose how long each one takes to become the next, and play.
+  The blend is saved as a real playlist if you want it again.
+- Be clear about what it is: a player runs one stream at a time, so this
+  *blends* records into a gapless set — it does not layer two songs on top of
+  each other, which would need two decoders and a beat grid.
+
+**Savings**
+
+- A **What you have saved** card built on a model of how a free, ad-supported
+  service actually behaves: ad breaks every ten to fifteen minutes of
+  *listening time*, ads up to 30 seconds, and an audio CPM in the $15–$25
+  range. All of it is adjustable and every assumption is printed with it.
+- It reports the subscription you did not buy, the **advertising spend a free
+  listener would have generated** (per hour and in total), the ad time skipped,
+  and the estimated artist payouts your plays represent — with the sources
+  listed underneath, because none of these numbers is published by Spotify.
 
 **Smart cache**
 
@@ -71,6 +125,14 @@ Metadata comes from Spotify; the audio never does.
 - Automatic eviction by maximum disk usage and by idle days (LRU).
 - Permanent `track → YouTube video` mapping cache, so a song you have played
   once resolves instantly forever after.
+
+**Artwork that does not leave holes**
+
+- Covers are looked up per track from Apple's public catalogue, at about twenty
+  requests a minute. When a track has no cover of its own, the pass now falls
+  back to **the picture it is filed under**: a cover already stored for another
+  track on the same album is borrowed locally and instantly, and failing that
+  the album itself is looked up once per album rather than once per track.
 
 ---
 
@@ -131,11 +193,30 @@ the same server-rendered page Spotify's own embed widget uses — and reads the
 `__NEXT_DATA__` JSON out of it, falling back to Spotify's public oEmbed
 endpoint for title and artwork. No account, no client id, no token.
 
-Two honest caveats. It is **not a supported interface**: Spotify can change or
-close that page at any time, and each failure is reported as a sentence rather
-than a crash. And it only ever reads what any browser can already see — your
-liked songs are account data, are not public, and can only arrive through a
-file you export yourself.
+### Why a playlist stops at 50 tracks
+
+This is Spotify's ceiling, not Gandar's, and it is worth being precise about
+it. The embed page Spotify serves its own widget carries at most 50 track
+entries. Checked directly, it returns exactly 50 for a playlist with thousands,
+and Spotify's ordinary playlist page carries no track data at all — it is
+rendered in the browser. The one route past 50 would be an authenticated
+token, and the endpoint that used to hand one out anonymously now answers
+`403 URL Blocked`.
+
+So the honest options are:
+
+- **Playlists up to 50 tracks:** paste the link, and they import whole.
+- **Longer playlists, or your own liked songs:** export once from
+  [exportify.net](https://exportify.net) and import the CSV. That path has no
+  cap at all, because the file is yours.
+- Gandar removes its *own* caps: a library search no longer stops at 50
+  results, and the queue renders every track it holds.
+
+Two more honest caveats. This is **not a supported interface**: Spotify can
+change or close that page at any time, and each failure is reported as a
+sentence rather than a crash. And it only ever reads what any browser can
+already see — your liked songs are account data, are not public, and can only
+arrive through a file you export yourself.
 
 Verified against the live site by
 [test/live/spotify_public_live_test.dart](test/live/spotify_public_live_test.dart),
@@ -158,7 +239,7 @@ lib/
   core/        Theme engine, playback settings, motion, errors
   domain/      Pure models and repository interfaces
   data/        Public-page reads, library-file imports, artwork lookup,
-               YouTube resolution, drift storage, cache
+               lyrics, artist feeds, YouTube resolution, drift storage, cache
   playback/    Audio engine, filter math, crossfade, queue and shuffle
   features/    One folder per screen
   state/       Riverpod providers + the dependency graph
@@ -176,6 +257,27 @@ Notable choices:
 | Extraction | `youtube_explode_dart` behind an interface | YouTube extraction is fragile; swap in `yt-dlp` or NewPipe without touching playback |
 | Artwork | Apple's public iTunes Search API, throttled to ~20 requests a minute | Covers come from a public catalogue with no key or account; the pass is resumable and stoppable |
 | Styling | Design tokens → one `ThemeEngine` mapping | No colour or radius literals in feature code, so a user-authored theme restyles everything |
+| Lyrics | LRCLIB | Free and documented, no account or key, and it returns both plain and time-synced lyrics |
+| Feed | YouTube channel Atom feeds, parsed by hand | A channel's uploads are a public feed, and four element names did not justify an XML dependency |
+
+### Startup
+
+Time to the first frame is measured in a release build, from a cold launch, and
+logged on every run:
+
+```
+INFO [startup] data directory resolved at 13 ms
+INFO [startup] window chrome: 20 ms
+INFO [startup] first frame in 122 ms
+```
+
+The window handshake used to be awaited on the critical path even though the
+native runner shows the window itself from `SetNextFrameCallback`
+(`windows/runner/flutter_window.cpp`), which meant the app could not draw until
+two platform round-trips had finished. Making it non-blocking took a release
+build from a **272 ms median to a 122 ms median** across four runs each. What
+remains is the data-directory probe, the settings read and Flutter's own engine
+draw — all of which happen inside the process before anything is on screen.
 
 ---
 
@@ -186,15 +288,19 @@ flutter analyze
 flutter test
 ```
 
-209 tests cover the theme codec (JSON + YAML round-trips, validation, and every
+305 tests cover the theme codec (JSON + YAML round-trips, validation, and every
 example theme file that ships in [examples/themes/](examples/themes) — so the
-documented format cannot drift from the code), playback settings and
-persistence, mpv filter-string generation, equal-power crossfade math, momentum
-projection, both shuffle strategies, the playback queue, LRU/idle cache
-eviction, stream pre-fetching, the public-page importer against pages recorded
-from the real site, CSV/JSON library files, the artwork pass, the host
-politeness governor, the provider retry policy, the failure wording on screen,
-and the drift repositories.
+documented format cannot drift from the code), the theme token accessors the
+editor writes through, playback settings and persistence, mpv filter-string
+generation, equal-power crossfade math, momentum projection, both shuffle
+strategies, the playback queue, LRU/idle cache eviction, stream pre-fetching,
+the audio stream selector at all three quality levels, the public-page importer
+against pages recorded from the real site, CSV/JSON library files, the artwork
+pass including its album fallback, YouTube channel feed parsing, the lyrics
+payload parser, share-link construction, the time-based savings arithmetic,
+the host politeness governor, the provider retry policy, the failure wording on
+screen, and the drift repositories (including making, editing and deleting a
+playlist).
 
 ---
 
@@ -218,6 +324,25 @@ and the drift repositories.
   serves its own embed widget, capped at 50 tracks per playlist, and Spotify
   may change it without notice. Long playlists and your own liked songs are
   covered by the file import instead.
+- **Lyrics come from a community database.** LRCLIB has none for a fair share
+  of tracks, and those say so rather than showing an empty panel. Time-synced
+  lyrics are reduced to plain text: there is no karaoke highlighting yet.
+- **The feed's channel matching is a heuristic.** It searches YouTube for the
+  artist and prefers the first result whose channel name contains the artist's,
+  so a short or common name can pick the wrong channel. It is labelled as a
+  guess wherever it is shown.
+- **A mashup blends, it does not layer.** Its own tab says so: one stream plays
+  at a time, so two songs cannot be superimposed.
+- **The savings figures are third-party estimates, not Spotify's numbers.**
+  Spotify publishes its per-subscriber revenue (~€4.89/month in Q2 2026) but
+  not a per-hour ad figure or a per-stream rate. The card therefore models the
+  ad load from external observations, prints every assumption, and lists its
+  sources on screen. Treat the totals as an illustration, not an accounting.
+- **Discord Rich Presence is not implemented yet.** It needs an application id
+  from the Discord Developer Portal, which is the user's to create; the setup
+  is documented in
+  [docs/discord.md](docs/discord.md) and the feature is not wired up until that
+  exists.
 - **Light themes are less battle-tested than dark ones.** The default is dark;
   [Paper Light](examples/themes/paper_light.gandar-theme.json) is the only light
   example, and contrast is not automatic outside the accent pair.

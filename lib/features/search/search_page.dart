@@ -11,14 +11,22 @@ import '../../state/providers.dart';
 import '../../widgets/common.dart';
 import '../player/player_surface.dart' show formatDuration;
 
-/// Searches two sources at once:
+/// Searches every source at once:
 ///
 /// * **your library** — already on disk, so it answers instantly and works
 ///   offline,
+/// * **your playlists** — matched by name, so a playlist is reachable from the
+///   search box as well as from the sidebar,
 /// * **YouTube** — playable even when a track has nothing to do with it.
 ///
 /// A track that comes from YouTube carries its video id, so tapping it plays
 /// that exact video through the normal queue.
+///
+/// The two music lists are *queued*, not played one at a time: tapping a
+/// YouTube result hands the whole result list to the player and starts at the
+/// result you tapped. Playing a single track used to leave "Up next" holding
+/// exactly the one song you had just started, which made the queue look
+/// broken — a search result set is a playlist, and it is treated as one.
 class SearchPage extends ConsumerStatefulWidget {
   const SearchPage({super.key});
 
@@ -54,6 +62,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final liked = ref.watch(likedTracksProvider).asData?.value ?? const [];
     final playlists = ref.watch(playlistsProvider).asData?.value ?? const [];
     final player = ref.watch(playbackControllerProvider);
+    final settings = ref.watch(playbackSettingsProvider);
 
     // Library matches need no network: filter what is already loaded.
     final libraryTracks = searching
@@ -65,7 +74,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               .toList(growable: false)
         : const <Playlist>[];
 
-    final youTube = searching
+    // The YouTube section is what the playback setting switches off, and it is
+    // the only part of the search that needs a connection.
+    final youTube = searching && settings.showYouTubeInSearch
         ? ref.watch(youTubeSearchProvider(query))
         : const AsyncValue<List<YouTubeVideo>>.data(<YouTubeVideo>[]);
 
@@ -110,6 +121,14 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                         subtitle:
                             '${libraryTracks.length} songs · '
                             '${libraryPlaylists.length} playlists',
+                        action: libraryTracks.isEmpty
+                            ? null
+                            : FilledButton.icon(
+                                onPressed: () =>
+                                    player.playTracks(libraryTracks),
+                                icon: const Icon(Icons.play_arrow),
+                                label: const Text('Play all'),
+                              ),
                         child: _trackList(
                           context,
                           libraryTracks,
@@ -128,23 +147,35 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                       ),
                       _Section(
                         title: 'On YouTube',
-                        subtitle: youTube.asData == null
+                        subtitle: !settings.showYouTubeInSearch
+                            ? 'turned off in Settings'
+                            : youTube.asData == null
                             ? 'searching…'
                             : '${youTube.asData!.value.length} videos',
+                        show: settings.showYouTubeInSearch,
                         child: _asyncList(
                           youTube,
-                          (videos) => Column(
-                            children: [
-                              for (final video in videos)
-                                _VideoRow(
-                                  video: video,
-                                  onPlay: () =>
-                                      player.playTracks([video.toTrack()]),
-                                ),
-                              if (videos.isEmpty)
-                                const _Hint('No YouTube matches.'),
-                            ],
-                          ),
+                          (videos) {
+                            // One queue for the whole result set, entered at the
+                            // row that was tapped.
+                            final queued = <Track>[
+                              for (final video in videos) video.toTrack(),
+                            ];
+                            return Column(
+                              children: [
+                                for (final video in videos)
+                                  _VideoRow(
+                                    video: video,
+                                    onPlay: () => player.playTracks(
+                                      queued,
+                                      startTrackId: video.trackId,
+                                    ),
+                                  ),
+                                if (videos.isEmpty)
+                                  const _Hint('No YouTube matches.'),
+                              ],
+                            );
+                          },
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -225,12 +256,16 @@ class _Section extends StatelessWidget {
     required this.child,
     this.subtitle,
     this.show = true,
+    this.action,
   });
 
   final String title;
   final String? subtitle;
   final Widget child;
   final bool show;
+
+  /// Optional trailing control, e.g. "Play all" for the section's results.
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -240,7 +275,7 @@ class _Section extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SectionHeader(title: title, subtitle: subtitle),
+          SectionHeader(title: title, subtitle: subtitle, action: action),
           const SizedBox(height: 4),
           child,
         ],

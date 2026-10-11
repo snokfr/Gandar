@@ -43,6 +43,14 @@ class Playlists extends Table {
   TextColumn get ownerName => text().nullable()();
   BoolColumn get isCollaborative =>
       boolean().withDefault(const Constant(false))();
+
+  /// True for a playlist made inside Gandar, false for one read from a
+  /// Spotify link or an exported file.
+  ///
+  /// The distinction is what lets the UI be honest about deleting: dropping a
+  /// local playlist really does destroy it, while dropping an imported one
+  /// only forgets a local copy of something that still exists on Spotify.
+  BoolColumn get isLocal => boolean().withDefault(const Constant(false))();
   DateTimeColumn get cachedAt => dateTime()();
 
   @override
@@ -126,7 +134,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.withExecutor(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   /// Indexes introduced in v2, using the generated statements so the migration
   /// cannot drift from the schema definition.
@@ -169,6 +177,12 @@ class AppDatabase extends _$AppDatabase {
         // existing tracks, mappings, cache entries and history are untouched.
         await m.createTable(playlistTracks);
         await m.createIndex(idxPlaylistTracksPlaylist);
+      }
+      if (from < 4) {
+        // v4 marks which playlists the user made here. Additive: every
+        // existing playlist defaults to false, i.e. imported, which is what
+        // everything stored before this version was.
+        await m.addColumn(playlists, playlists.isLocal);
       }
     },
     beforeOpen: (details) async {

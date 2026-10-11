@@ -8,6 +8,7 @@ class Playlist {
     this.artworkUrl,
     this.ownerName,
     this.isCollaborative = false,
+    this.isLocal = false,
   });
 
   final String id;
@@ -18,6 +19,18 @@ class Playlist {
   final String? ownerName;
   final bool isCollaborative;
 
+  /// True when this playlist was made inside Gandar rather than imported.
+  ///
+  /// Used to word the delete confirmation honestly: deleting a local playlist
+  /// destroys it, while deleting an imported one only forgets a local copy of
+  /// something that still exists on Spotify.
+  final bool isLocal;
+
+  /// The prefix every Gandar-made playlist id carries.
+  static const String localPrefix = 'local-';
+
+  static bool isLocalId(String id) => id.startsWith(localPrefix);
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
@@ -26,6 +39,7 @@ class Playlist {
     'artworkUrl': artworkUrl,
     'ownerName': ownerName,
     'isCollaborative': isCollaborative,
+    'isLocal': isLocal,
   };
 
   static Playlist fromJson(Map<String, dynamic> j) => Playlist(
@@ -36,6 +50,7 @@ class Playlist {
     artworkUrl: j['artworkUrl'] as String?,
     ownerName: j['ownerName'] as String?,
     isCollaborative: j['isCollaborative'] as bool? ?? false,
+    isLocal: j['isLocal'] as bool? ?? false,
   );
 
   static Playlist fromSpotify(Map<String, dynamic> json) {
@@ -53,6 +68,17 @@ class Playlist {
       isCollaborative: json['collaborative'] as bool? ?? false,
     );
   }
+
+  Playlist copyWith({String? name, int? trackCount, bool? isLocal}) => Playlist(
+    id: id,
+    name: name ?? this.name,
+    description: description,
+    trackCount: trackCount ?? this.trackCount,
+    artworkUrl: artworkUrl,
+    ownerName: ownerName,
+    isCollaborative: isCollaborative,
+    isLocal: isLocal ?? this.isLocal,
+  );
 
   @override
   bool operator ==(Object other) =>

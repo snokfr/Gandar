@@ -8,10 +8,10 @@ import '../../widgets/common.dart';
 
 /// "What you are saving" — money and time, from this device's play history.
 ///
-/// Two numbers are facts ([ListeningStats.listeningTime] and
-/// [ListeningStats.totalPlays]); the rest are estimates built on the two
-/// assumptions shown at the bottom of the card, which the user can change. The
-/// card says so rather than presenting a guess as a measurement.
+/// Only two numbers here are facts: [ListeningStats.listeningTime] and
+/// [ListeningStats.totalPlays]. Everything else is arithmetic on assumptions
+/// printed at the bottom of the card, each of which the user can change. The
+/// card says which is which rather than dressing a guess up as a measurement.
 class SavingsCard extends ConsumerWidget {
   const SavingsCard({super.key});
 
@@ -20,6 +20,7 @@ class SavingsCard extends ConsumerWidget {
     final stats = ref.watch(listeningStatsProvider);
     final settings = ref.watch(playbackSettingsProvider);
     final notifier = ref.read(playbackSettingsProvider.notifier);
+    final theme = Theme.of(context);
 
     return stats.when(
       loading: () => const GandarCard(
@@ -40,7 +41,7 @@ class SavingsCard extends ConsumerWidget {
                 const SizedBox(width: 8),
                 Text(
                   'What you have saved',
-                  style: Theme.of(context).textTheme.titleMedium,
+                  style: theme.textTheme.titleMedium,
                 ),
               ],
             ),
@@ -49,7 +50,7 @@ class SavingsCard extends ConsumerWidget {
               data.totalPlays == 0
                   ? 'Play a few tracks and this fills in.'
                   : 'From ${data.totalPlays} plays on this device.',
-              style: Theme.of(context).textTheme.bodySmall,
+              style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 16),
 
@@ -58,26 +59,30 @@ class SavingsCard extends ConsumerWidget {
               runSpacing: 16,
               children: [
                 _Metric(
-                  label: 'Money, this month',
-                  value: data.totalPlays == 0
-                      ? '—'
-                      : '\$${data.monthlySaving.toStringAsFixed(2)}',
-                  hint: 'a paid subscription instead',
-                ),
-                _Metric(
-                  label: 'Money, all time',
+                  label: 'Subscription you did not buy',
                   value: data.totalPlays == 0
                       ? '—'
                       : '\$${data.premiumCostEquivalent.toStringAsFixed(2)}',
                   hint:
                       '${data.monthsActive} '
-                      'month${data.monthsActive == 1 ? '' : 's'} of use',
+                      'month${data.monthsActive == 1 ? '' : 's'} at '
+                      '\$${data.premiumMonthlyCost.toStringAsFixed(2)}/month',
+                ),
+                _Metric(
+                  label: 'Ad money they did not earn',
+                  value: data.totalPlays == 0
+                      ? '—'
+                      : '\$${data.adEarningsAvoided.toStringAsFixed(2)}',
+                  hint:
+                      'advertiser spend for ${data.adBreaks} ad '
+                      'break${data.adBreaks == 1 ? '' : 's'}',
                 ),
                 _Metric(
                   label: 'Ad time skipped',
                   value: _duration(data.adTimeAvoided),
                   hint:
-                      'estimated at ${data.adSecondsPerTrack.round()}s per track',
+                      'at ${data.adBreakMinutes.toStringAsFixed(0)} min between '
+                      'breaks',
                 ),
                 _Metric(
                   label: 'Music played',
@@ -88,9 +93,14 @@ class SavingsCard extends ConsumerWidget {
                       : 'every play had a known duration',
                 ),
                 _Metric(
-                  label: 'Time reclaimed',
-                  value: _duration(data.timeReclaimed),
-                  hint: 'listening plus skipped ads',
+                  label: 'Artist payouts generated',
+                  value: data.totalPlays == 0
+                      ? '—'
+                      : '\$${data.artistPayoutEquivalent.toStringAsFixed(2)}',
+                  hint:
+                      'estimate at \$'
+                      '${data.artistPayoutPerStream.toStringAsFixed(3)} a '
+                      'stream',
                 ),
                 _Metric(
                   label: 'Different songs',
@@ -100,12 +110,41 @@ class SavingsCard extends ConsumerWidget {
               ],
             ),
 
+            if (data.totalPlays > 0) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: context.gandarTokens.surfaceElevatedColor,
+                  borderRadius: BorderRadius.circular(
+                    context.gandarTokens.radiusSm,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 18,
+                      color: context.gandarTokens.textSecondaryColor,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'A free account earns its service about '
+                        '\$${data.adEarningsPerHour.toStringAsFixed(2)} an hour '
+                        'from advertising at these settings — which is why the '
+                        'ads are there.',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             if (data.maxDailyPlays > 0) ...[
               const SizedBox(height: 20),
-              Text(
-                'Last 14 days',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+              Text('Last 14 days', style: theme.textTheme.bodySmall),
               const SizedBox(height: 6),
               _PlaySparkline(data: data),
             ],
@@ -113,28 +152,18 @@ class SavingsCard extends ConsumerWidget {
             const SizedBox(height: 20),
             const Divider(height: 1),
             const SizedBox(height: 12),
-            Text('Assumptions', style: Theme.of(context).textTheme.titleSmall),
+            Text('Assumptions', style: theme.textTheme.titleSmall),
             const SizedBox(height: 2),
             Text(
-              'These are guesses, not measurements. Adjust them to match the '
-              'service you are comparing against.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            SettingSliderTile(
-              title: 'Ad time per track',
-              description: 'Ad seconds a free account would play per song.',
-              value: settings.savingsAdSecondsPerTrack,
-              min: 0,
-              max: 60,
-              divisions: 60,
-              valueLabel: (v) => '${v.toStringAsFixed(0)} s',
-              onChanged: (v) => notifier.update(
-                settings.copyWith(savingsAdSecondsPerTrack: v),
-              ),
+              'These are estimates, not measurements, and none of them is '
+              'published by Spotify. Change them to match what you see and '
+              'hear.',
+              style: theme.textTheme.bodySmall,
             ),
             SettingSliderTile(
               title: 'Subscription price',
-              description: 'Monthly cost of the paid service you did not buy.',
+              description: 'Monthly cost of the plan you did not buy. Spotify '
+                  'charges \$12.99 for its US Individual plan.',
               value: settings.savingsPremiumMonthlyCost,
               min: 0,
               max: 30,
@@ -144,11 +173,103 @@ class SavingsCard extends ConsumerWidget {
                 settings.copyWith(savingsPremiumMonthlyCost: v),
               ),
             ),
+            SettingSliderTile(
+              title: 'Minutes between ad breaks',
+              description:
+                  'A free account plays a break every ten to fifteen minutes '
+                  'of listening. Ads are counted against time, not tracks.',
+              value: settings.savingsAdBreakMinutes,
+              min: 2,
+              max: 30,
+              divisions: 28,
+              valueLabel: (v) => '${v.toStringAsFixed(0)} min',
+              onChanged: (v) => notifier.update(
+                settings.copyWith(savingsAdBreakMinutes: v),
+              ),
+            ),
+            SettingSliderTile(
+              title: 'Length of one ad',
+              description: 'Spotify\'s audio ads run up to 30 seconds.',
+              value: settings.savingsAdSeconds,
+              min: 0,
+              max: 60,
+              divisions: 60,
+              valueLabel: (v) => '${v.toStringAsFixed(0)} s',
+              onChanged: (v) => notifier.update(
+                settings.copyWith(savingsAdSeconds: v),
+              ),
+            ),
+            SettingSliderTile(
+              title: 'Ads per break',
+              description: 'How many spots play in one break.',
+              value: settings.savingsAdsPerBreak,
+              min: 0,
+              max: 4,
+              divisions: 8,
+              valueLabel: (v) => v.toStringAsFixed(1),
+              onChanged: (v) => notifier.update(
+                settings.copyWith(savingsAdsPerBreak: v),
+              ),
+            ),
+            SettingSliderTile(
+              title: 'Ad cost per thousand plays',
+              description:
+                  'What an advertiser pays per 1,000 impressions. Industry '
+                  'guides put Spotify audio around \$15–\$25.',
+              value: settings.savingsAdsCpm,
+              min: 0,
+              max: 60,
+              divisions: 60,
+              valueLabel: (v) => '\$${v.toStringAsFixed(0)}',
+              onChanged: (v) => notifier.update(
+                settings.copyWith(savingsAdsCpm: v),
+              ),
+            ),
+            SettingSliderTile(
+              title: 'Artist payout per stream',
+              description:
+                  'Industry estimates run \$0.003–\$0.005, and this is a '
+                  'rights-holder payout rather than Spotify\'s revenue.',
+              value: settings.savingsArtistPayoutPerStream,
+              min: 0,
+              max: 0.02,
+              divisions: 20,
+              valueLabel: (v) => '\$${v.toStringAsFixed(3)}',
+              onChanged: (v) => notifier.update(
+                settings.copyWith(savingsArtistPayoutPerStream: v),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+            Text('Where these come from', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 4),
+            for (final source in _sources)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '• $source',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
           ],
         ),
       ),
     );
   }
+
+  static const List<String> _sources = <String>[
+    'Spotify Premium US pricing (January 2026 increase): '
+        'spotify.com/us/premium',
+    'Audio ad formats and the 30-second spot: '
+        'ads.spotify.com/en-US/ad-specs/audio-ad-specs/',
+    'How Spotify pays rights holders (revenue share, not a per-stream rate): '
+        'artists.spotify.com/royalties-guide',
+    'Per-stream payout estimates of \$0.003–\$0.005: tunecore.com/guides/'
+        'how-much-does-spotify-pay',
+    'Reported ad-break frequency of roughly every 10–15 minutes in listening '
+        'tests, and \$15–\$25 CPM benchmarks from agency guides. Both are '
+        'third-party observations, not Spotify figures.',
+  ];
 
   /// Compact duration: `2 h 14 m`, `45 m`, `30 s`.
   static String _duration(Duration d) {
@@ -171,7 +292,7 @@ class _Metric extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return SizedBox(
-      width: 170,
+      width: 190,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

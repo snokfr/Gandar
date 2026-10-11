@@ -9,6 +9,7 @@ class YouTubeVideo {
     required this.videoId,
     required this.title,
     this.author,
+    this.channelId,
     this.duration,
     this.thumbnailUrl,
   });
@@ -16,6 +17,13 @@ class YouTubeVideo {
   final String videoId;
   final String title;
   final String? author;
+
+  /// The uploader's channel id, when YouTube reports one.
+  ///
+  /// Carried because it is the key to a channel's Atom feed, which is how the
+  /// feed tab finds an artist's new releases without a YouTube account.
+  final String? channelId;
+
   final Duration? duration;
   final String? thumbnailUrl;
 
@@ -110,6 +118,7 @@ class YouTubeSearcher {
     videoId: video.id.value,
     title: video.title,
     author: video.author,
+    channelId: video.channelId.value.isEmpty ? null : video.channelId.value,
     duration: video.duration,
     thumbnailUrl: video.thumbnails.mediumResUrl,
   );

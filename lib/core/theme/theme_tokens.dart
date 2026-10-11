@@ -79,6 +79,71 @@ class ThemeTokens {
     return c;
   }
 
+  /// Every colour a theme is made of, in the order an editor should show them.
+  ///
+  /// Kept in one place so the editor, the codec and the docs cannot drift apart
+  /// about what a theme consists of.
+  static const List<String> colorKeys = <String>[
+    'backgroundPrimary',
+    'backgroundSecondary',
+    'surface',
+    'surfaceElevated',
+    'textPrimary',
+    'textSecondary',
+    'accent',
+    'accentAlt',
+    'border',
+  ];
+
+  /// A human label for a key, for the editor.
+  static String labelFor(String key) => switch (key) {
+    'backgroundPrimary' => 'Window background',
+    'backgroundSecondary' => 'Panel background',
+    'surface' => 'Card',
+    'surfaceElevated' => 'Raised surface',
+    'textPrimary' => 'Text',
+    'textSecondary' => 'Secondary text',
+    'accent' => 'Accent',
+    'accentAlt' => 'Accent, second',
+    'border' => 'Borders',
+    _ => key,
+  };
+
+  /// The current value of a colour key, or null when the key is unknown.
+  Color? colorFor(String key) => switch (key) {
+    'backgroundPrimary' => backgroundPrimaryColor,
+    'backgroundSecondary' => backgroundSecondaryColor,
+    'surface' => surfaceColor,
+    'surfaceElevated' => surfaceElevatedColor,
+    'textPrimary' => textPrimaryColor,
+    'textSecondary' => textSecondaryColor,
+    'accent' => accentColor,
+    'accentAlt' => accentAltColor,
+    'border' => borderColor,
+    _ => null,
+  };
+
+  /// A copy with one colour replaced. Unknown keys are ignored, so a stale
+  /// editor control can never corrupt a theme.
+  ThemeTokens withColor(String key, int argb) => switch (key) {
+    'backgroundPrimary' => copyWith(backgroundPrimary: argb),
+    'backgroundSecondary' => copyWith(backgroundSecondary: argb),
+    'surface' => copyWith(surface: argb),
+    'surfaceElevated' => copyWith(surfaceElevated: argb),
+    'textPrimary' => copyWith(textPrimary: argb),
+    'textSecondary' => copyWith(textSecondary: argb),
+    'accent' => copyWith(accent: argb),
+    'accentAlt' => copyWith(accentAlt: argb),
+    'border' => copyWith(border: argb),
+    _ => this,
+  };
+
+  /// Whether this theme is a built-in preset, which cannot be edited in place.
+  bool get isBuiltIn => const <String>[
+    'spotify_classic',
+    'earthy_brown',
+  ].contains(id);
+
   ThemeTokens copyWith({
     String? id,
     String? name,

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 import '../../core/logging/app_logger.dart';
+import '../../core/settings/playback_settings.dart';
 import '../../domain/models/resolved_stream.dart';
 import '../../domain/models/track.dart';
 import '../../domain/repositories/repositories.dart';
@@ -198,6 +199,26 @@ class YoutubeExplodeResolver implements AudioResolver {
   String? get preferredClient => _preferred;
   String? _preferred;
 
+  /// How much bandwidth to spend on each track's audio.
+  ///
+  /// Held here rather than read from settings at resolve time so the resolver
+  /// stays free of the settings store, and pushed in by the playback controller
+  /// whenever the user changes it.
+  AudioQuality _audioQuality = AudioQuality.balanced;
+
+  /// The quality in force, for the diagnostics panel and tests.
+  AudioQuality get audioQuality => _audioQuality;
+
+  @override
+  void setAudioQuality(AudioQuality quality) {
+    if (quality == _audioQuality) return;
+    _audioQuality = quality;
+    AppLogger.instance.info(
+      'youtube',
+      'audio quality set to ${quality.name}',
+    );
+  }
+
   final YoutubeExplode _yt;
   final List<YoutubeApiClient> _clients;
   final int searchResultLimit;
@@ -373,7 +394,7 @@ class YoutubeExplodeResolver implements AudioResolver {
         )
         .toList(growable: false);
 
-    final best = selector.selectBest(options);
+    final best = selector.selectBest(options, quality: _audioQuality);
     if (best == null) {
       throw AudioResolutionException('Video has no audio-only streams');
     }

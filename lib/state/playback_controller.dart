@@ -27,6 +27,9 @@ class PlaybackController extends ChangeNotifier {
     ShuffleService? shuffleService,
   }) : _queue = queue ?? PlaybackQueue(shuffleService: shuffleService) {
     _settings = settings.sanitized();
+    // The resolver picks the stream, so the quality in force has to reach it
+    // before the first track is asked for.
+    preloader.resolver.setAudioQuality(_settings.audioQuality);
     _stateSub = engine.stateStream.listen(_onEngineState);
     _positionSub = engine.positionStream.listen((p) {
       positionNotifier.value = p;
@@ -117,6 +120,7 @@ class PlaybackController extends ChangeNotifier {
   Future<void> updateSettings(PlaybackSettings next) async {
     final previousMode = _settings.shuffleMode;
     _settings = next.sanitized();
+    preloader.resolver.setAudioQuality(_settings.audioQuality);
     await engine.applyFilters(_settings);
     if (previousMode != _settings.shuffleMode) {
       _queue.applyShuffle(_settings.shuffleMode, recentTrackIds: _recent.items);
@@ -166,6 +170,16 @@ class PlaybackController extends ChangeNotifier {
     final prev = _queue.rewind();
     if (prev == null) return;
     await _playCurrent();
+  }
+
+  /// Jumps straight to [trackId] in the current queue and plays it.
+  ///
+  /// Returns false when the track is not in the queue, so the caller can say
+  /// so instead of appearing to do nothing.
+  Future<bool> jumpTo(String trackId) async {
+    if (!_queue.jumpTo(trackId)) return false;
+    await _playCurrent();
+    return true;
   }
 
   Future<void> seek(Duration position) async {

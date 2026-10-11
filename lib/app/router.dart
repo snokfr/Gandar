@@ -1,8 +1,10 @@
 import 'package:go_router/go_router.dart';
 
 import '../features/albums/albums_page.dart';
+import '../features/feed/feed_page.dart';
 import '../features/import/import_page.dart';
 import '../features/library/library_page.dart';
+import '../features/mashup/mashup_page.dart';
 import '../features/playlists/playlists_page.dart';
 import '../features/search/search_page.dart';
 import '../features/settings/settings_page.dart';
@@ -43,6 +45,14 @@ GoRouter buildRouter() {
                 ),
               ),
             ],
+          ),
+          GoRoute(
+            path: '/feed',
+            builder: (context, state) => const FeedPage(),
+          ),
+          GoRoute(
+            path: '/mashup',
+            builder: (context, state) => const MashupPage(),
           ),
           GoRoute(
             path: '/search',

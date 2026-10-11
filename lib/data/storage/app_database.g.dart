@@ -645,6 +645,21 @@ class $PlaylistsTable extends Playlists
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _isLocalMeta = const VerificationMeta(
+    'isLocal',
+  );
+  @override
+  late final GeneratedColumn<bool> isLocal = GeneratedColumn<bool>(
+    'is_local',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_local" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _cachedAtMeta = const VerificationMeta(
     'cachedAt',
   );
@@ -665,6 +680,7 @@ class $PlaylistsTable extends Playlists
     artworkUrl,
     ownerName,
     isCollaborative,
+    isLocal,
     cachedAt,
   ];
   @override
@@ -728,6 +744,12 @@ class $PlaylistsTable extends Playlists
         ),
       );
     }
+    if (data.containsKey('is_local')) {
+      context.handle(
+        _isLocalMeta,
+        isLocal.isAcceptableOrUnknown(data['is_local']!, _isLocalMeta),
+      );
+    }
     if (data.containsKey('cached_at')) {
       context.handle(
         _cachedAtMeta,
@@ -773,6 +795,10 @@ class $PlaylistsTable extends Playlists
         DriftSqlType.bool,
         data['${effectivePrefix}is_collaborative'],
       )!,
+      isLocal: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_local'],
+      )!,
       cachedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}cached_at'],
@@ -794,6 +820,14 @@ class PlaylistRow extends DataClass implements Insertable<PlaylistRow> {
   final String? artworkUrl;
   final String? ownerName;
   final bool isCollaborative;
+
+  /// True for a playlist made inside Gandar, false for one read from a
+  /// Spotify link or an exported file.
+  ///
+  /// The distinction is what lets the UI be honest about deleting: dropping a
+  /// local playlist really does destroy it, while dropping an imported one
+  /// only forgets a local copy of something that still exists on Spotify.
+  final bool isLocal;
   final DateTime cachedAt;
   const PlaylistRow({
     required this.id,
@@ -803,6 +837,7 @@ class PlaylistRow extends DataClass implements Insertable<PlaylistRow> {
     this.artworkUrl,
     this.ownerName,
     required this.isCollaborative,
+    required this.isLocal,
     required this.cachedAt,
   });
   @override
@@ -819,6 +854,7 @@ class PlaylistRow extends DataClass implements Insertable<PlaylistRow> {
       map['owner_name'] = Variable<String>(ownerName);
     }
     map['is_collaborative'] = Variable<bool>(isCollaborative);
+    map['is_local'] = Variable<bool>(isLocal);
     map['cached_at'] = Variable<DateTime>(cachedAt);
     return map;
   }
@@ -836,6 +872,7 @@ class PlaylistRow extends DataClass implements Insertable<PlaylistRow> {
           ? const Value.absent()
           : Value(ownerName),
       isCollaborative: Value(isCollaborative),
+      isLocal: Value(isLocal),
       cachedAt: Value(cachedAt),
     );
   }
@@ -853,6 +890,7 @@ class PlaylistRow extends DataClass implements Insertable<PlaylistRow> {
       artworkUrl: serializer.fromJson<String?>(json['artworkUrl']),
       ownerName: serializer.fromJson<String?>(json['ownerName']),
       isCollaborative: serializer.fromJson<bool>(json['isCollaborative']),
+      isLocal: serializer.fromJson<bool>(json['isLocal']),
       cachedAt: serializer.fromJson<DateTime>(json['cachedAt']),
     );
   }
@@ -867,6 +905,7 @@ class PlaylistRow extends DataClass implements Insertable<PlaylistRow> {
       'artworkUrl': serializer.toJson<String?>(artworkUrl),
       'ownerName': serializer.toJson<String?>(ownerName),
       'isCollaborative': serializer.toJson<bool>(isCollaborative),
+      'isLocal': serializer.toJson<bool>(isLocal),
       'cachedAt': serializer.toJson<DateTime>(cachedAt),
     };
   }
@@ -879,6 +918,7 @@ class PlaylistRow extends DataClass implements Insertable<PlaylistRow> {
     Value<String?> artworkUrl = const Value.absent(),
     Value<String?> ownerName = const Value.absent(),
     bool? isCollaborative,
+    bool? isLocal,
     DateTime? cachedAt,
   }) => PlaylistRow(
     id: id ?? this.id,
@@ -888,6 +928,7 @@ class PlaylistRow extends DataClass implements Insertable<PlaylistRow> {
     artworkUrl: artworkUrl.present ? artworkUrl.value : this.artworkUrl,
     ownerName: ownerName.present ? ownerName.value : this.ownerName,
     isCollaborative: isCollaborative ?? this.isCollaborative,
+    isLocal: isLocal ?? this.isLocal,
     cachedAt: cachedAt ?? this.cachedAt,
   );
   PlaylistRow copyWithCompanion(PlaylistsCompanion data) {
@@ -907,6 +948,7 @@ class PlaylistRow extends DataClass implements Insertable<PlaylistRow> {
       isCollaborative: data.isCollaborative.present
           ? data.isCollaborative.value
           : this.isCollaborative,
+      isLocal: data.isLocal.present ? data.isLocal.value : this.isLocal,
       cachedAt: data.cachedAt.present ? data.cachedAt.value : this.cachedAt,
     );
   }
@@ -921,6 +963,7 @@ class PlaylistRow extends DataClass implements Insertable<PlaylistRow> {
           ..write('artworkUrl: $artworkUrl, ')
           ..write('ownerName: $ownerName, ')
           ..write('isCollaborative: $isCollaborative, ')
+          ..write('isLocal: $isLocal, ')
           ..write('cachedAt: $cachedAt')
           ..write(')'))
         .toString();
@@ -935,6 +978,7 @@ class PlaylistRow extends DataClass implements Insertable<PlaylistRow> {
     artworkUrl,
     ownerName,
     isCollaborative,
+    isLocal,
     cachedAt,
   );
   @override
@@ -948,6 +992,7 @@ class PlaylistRow extends DataClass implements Insertable<PlaylistRow> {
           other.artworkUrl == this.artworkUrl &&
           other.ownerName == this.ownerName &&
           other.isCollaborative == this.isCollaborative &&
+          other.isLocal == this.isLocal &&
           other.cachedAt == this.cachedAt);
 }
 
@@ -959,6 +1004,7 @@ class PlaylistsCompanion extends UpdateCompanion<PlaylistRow> {
   final Value<String?> artworkUrl;
   final Value<String?> ownerName;
   final Value<bool> isCollaborative;
+  final Value<bool> isLocal;
   final Value<DateTime> cachedAt;
   final Value<int> rowid;
   const PlaylistsCompanion({
@@ -969,6 +1015,7 @@ class PlaylistsCompanion extends UpdateCompanion<PlaylistRow> {
     this.artworkUrl = const Value.absent(),
     this.ownerName = const Value.absent(),
     this.isCollaborative = const Value.absent(),
+    this.isLocal = const Value.absent(),
     this.cachedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -980,6 +1027,7 @@ class PlaylistsCompanion extends UpdateCompanion<PlaylistRow> {
     this.artworkUrl = const Value.absent(),
     this.ownerName = const Value.absent(),
     this.isCollaborative = const Value.absent(),
+    this.isLocal = const Value.absent(),
     required DateTime cachedAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -993,6 +1041,7 @@ class PlaylistsCompanion extends UpdateCompanion<PlaylistRow> {
     Expression<String>? artworkUrl,
     Expression<String>? ownerName,
     Expression<bool>? isCollaborative,
+    Expression<bool>? isLocal,
     Expression<DateTime>? cachedAt,
     Expression<int>? rowid,
   }) {
@@ -1004,6 +1053,7 @@ class PlaylistsCompanion extends UpdateCompanion<PlaylistRow> {
       if (artworkUrl != null) 'artwork_url': artworkUrl,
       if (ownerName != null) 'owner_name': ownerName,
       if (isCollaborative != null) 'is_collaborative': isCollaborative,
+      if (isLocal != null) 'is_local': isLocal,
       if (cachedAt != null) 'cached_at': cachedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -1017,6 +1067,7 @@ class PlaylistsCompanion extends UpdateCompanion<PlaylistRow> {
     Value<String?>? artworkUrl,
     Value<String?>? ownerName,
     Value<bool>? isCollaborative,
+    Value<bool>? isLocal,
     Value<DateTime>? cachedAt,
     Value<int>? rowid,
   }) {
@@ -1028,6 +1079,7 @@ class PlaylistsCompanion extends UpdateCompanion<PlaylistRow> {
       artworkUrl: artworkUrl ?? this.artworkUrl,
       ownerName: ownerName ?? this.ownerName,
       isCollaborative: isCollaborative ?? this.isCollaborative,
+      isLocal: isLocal ?? this.isLocal,
       cachedAt: cachedAt ?? this.cachedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -1057,6 +1109,9 @@ class PlaylistsCompanion extends UpdateCompanion<PlaylistRow> {
     if (isCollaborative.present) {
       map['is_collaborative'] = Variable<bool>(isCollaborative.value);
     }
+    if (isLocal.present) {
+      map['is_local'] = Variable<bool>(isLocal.value);
+    }
     if (cachedAt.present) {
       map['cached_at'] = Variable<DateTime>(cachedAt.value);
     }
@@ -1076,6 +1131,7 @@ class PlaylistsCompanion extends UpdateCompanion<PlaylistRow> {
           ..write('artworkUrl: $artworkUrl, ')
           ..write('ownerName: $ownerName, ')
           ..write('isCollaborative: $isCollaborative, ')
+          ..write('isLocal: $isLocal, ')
           ..write('cachedAt: $cachedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -2653,6 +2709,7 @@ typedef $$PlaylistsTableCreateCompanionBuilder = PlaylistsCompanion Function({
   Value<String?> artworkUrl,
   Value<String?> ownerName,
   Value<bool> isCollaborative,
+  Value<bool> isLocal,
   required DateTime cachedAt,
   Value<int> rowid,
 });
@@ -2664,6 +2721,7 @@ typedef $$PlaylistsTableUpdateCompanionBuilder = PlaylistsCompanion Function({
   Value<String?> artworkUrl,
   Value<String?> ownerName,
   Value<bool> isCollaborative,
+  Value<bool> isLocal,
   Value<DateTime> cachedAt,
   Value<int> rowid,
 });
@@ -2709,6 +2767,11 @@ class $$PlaylistsTableFilterComposer
 
   ColumnFilters<bool> get isCollaborative => $composableBuilder(
     column: $table.isCollaborative,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isLocal => $composableBuilder(
+    column: $table.isLocal,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2762,6 +2825,11 @@ class $$PlaylistsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get isLocal => $composableBuilder(
+    column: $table.isLocal,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get cachedAt => $composableBuilder(
     column: $table.cachedAt,
     builder: (column) => ColumnOrderings(column),
@@ -2806,6 +2874,9 @@ class $$PlaylistsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get isLocal =>
+      $composableBuilder(column: $table.isLocal, builder: (column) => column);
+
   GeneratedColumn<DateTime> get cachedAt =>
       $composableBuilder(column: $table.cachedAt, builder: (column) => column);
 }
@@ -2848,6 +2919,7 @@ class $$PlaylistsTableTableManager
                 Value<String?> artworkUrl = const Value.absent(),
                 Value<String?> ownerName = const Value.absent(),
                 Value<bool> isCollaborative = const Value.absent(),
+                Value<bool> isLocal = const Value.absent(),
                 Value<DateTime> cachedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PlaylistsCompanion(
@@ -2858,6 +2930,7 @@ class $$PlaylistsTableTableManager
                 artworkUrl: artworkUrl,
                 ownerName: ownerName,
                 isCollaborative: isCollaborative,
+                isLocal: isLocal,
                 cachedAt: cachedAt,
                 rowid: rowid,
               ),
@@ -2870,6 +2943,7 @@ class $$PlaylistsTableTableManager
                 Value<String?> artworkUrl = const Value.absent(),
                 Value<String?> ownerName = const Value.absent(),
                 Value<bool> isCollaborative = const Value.absent(),
+                Value<bool> isLocal = const Value.absent(),
                 required DateTime cachedAt,
                 Value<int> rowid = const Value.absent(),
               }) => PlaylistsCompanion.insert(
@@ -2880,6 +2954,7 @@ class $$PlaylistsTableTableManager
                 artworkUrl: artworkUrl,
                 ownerName: ownerName,
                 isCollaborative: isCollaborative,
+                isLocal: isLocal,
                 cachedAt: cachedAt,
                 rowid: rowid,
               ),

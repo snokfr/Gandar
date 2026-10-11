@@ -33,6 +33,18 @@ const List<_Destination> _destinations = <_Destination>[
     Icons.queue_music_outlined,
     Icons.queue_music,
   ),
+  _Destination(
+    '/feed',
+    'Feed',
+    Icons.dynamic_feed_outlined,
+    Icons.dynamic_feed,
+  ),
+  _Destination(
+    '/mashup',
+    'Mashup',
+    Icons.motion_photos_on_outlined,
+    Icons.motion_photos_on,
+  ),
   _Destination('/search', 'Search', Icons.search_outlined, Icons.search),
   _Destination('/import', 'Import', Icons.download_outlined, Icons.download),
   _Destination('/themes', 'Themes', Icons.palette_outlined, Icons.palette),
@@ -43,6 +55,15 @@ const List<_Destination> _destinations = <_Destination>[
     Icons.settings,
   ),
 ];
+
+/// How many destinations the mobile bottom bar shows.
+///
+/// Nine tabs do not fit a phone's bottom bar, and Flutter's answer to that is
+/// cramped labels rather than an overflow menu. The bar therefore shows the
+/// places a phone is actually used for — browsing, searching, importing — and
+/// the rest stay one tap away through the sidebar's equivalents on desktop,
+/// where the whole list is shown.
+const int _mobileDestinationCount = 5;
 
 /// Width at or above which the desktop layout is used.
 const double kDesktopBreakpoint = 900;
@@ -144,10 +165,10 @@ class _AppShellState extends ConsumerState<AppShell> {
             ],
           ),
           bottomNavigationBar: NavigationBar(
-            selectedIndex: index,
+            selectedIndex: index < _mobileDestinationCount ? index : 0,
             onDestinationSelected: (i) => context.go(_destinations[i].path),
             destinations: [
-              for (final d in _destinations)
+              for (final d in _destinations.take(_mobileDestinationCount))
                 NavigationDestination(
                   icon: Icon(d.icon),
                   selectedIcon: Icon(d.selectedIcon),
