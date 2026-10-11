@@ -6,6 +6,56 @@ import '../../core/logging/app_logger.dart';
 import '../../domain/models/track.dart';
 import '../net/request_gate.dart';
 
+/// One line of time-synced lyrics, and when it starts.
+class LyricLine {
+  const LyricLine({required this.at, required this.text});
+
+  /// When the line begins, from the LRC timestamp.
+  final Duration at;
+
+  /// The words. Empty for a line the LRC marks as an instrumental gap: it
+  /// still occupies a moment, and the highlight is expected to move through it
+  /// rather than jump over it.
+  final String text;
+
+  bool get isBlank => text.trim().isEmpty;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LyricLine && other.at == at && other.text == text;
+
+  @override
+  int get hashCode => Object.hash(at, text);
+
+  @override
+  String toString() => 'LyricLine($at, "$text")';
+}
+
+/// The line that should be highlighted when playback is at [position].
+///
+/// Returns -1 before the first line begins, which is what a track with a long
+/// instrumental intro wants: nothing highlighted yet, rather than the first
+/// line lit up from the start. Binary search, because this runs on every
+/// position tick and a long lyric is a few hundred lines.
+int activeLineIndex(List<LyricLine> lines, Duration position) {
+  if (lines.isEmpty) return -1;
+  if (position < lines.first.at) return -1;
+  var low = 0;
+  var high = lines.length - 1;
+  var found = 0;
+  while (low <= high) {
+    final middle = (low + high) ~/ 2;
+    if (lines[middle].at <= position) {
+      found = middle;
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return found;
+}
+
 /// Lyrics for one track, plain and — when the source has them — time-synced.
 class Lyrics {
   const Lyrics({
@@ -31,7 +81,58 @@ class Lyrics {
   bool get hasSynced => synced != null && synced!.trim().isNotEmpty;
   bool get isEmpty => plain.trim().isEmpty;
 
+  /// The time-synced lines, or empty when the source had only plain text.
+  ///
+  /// Parsed on demand rather than stored: [Lyrics] is a `const` value that is
+  /// handed around whole, and the carriers of one track's lyrics are few. The
+  /// view that displays them parses once per track and keeps the result.
+  List<LyricLine> get timedLines =>
+      hasSynced ? linesFromLrc(synced!) : const <LyricLine>[];
+
   static const Lyrics none = Lyrics(plain: '');
+
+  /// Timestamps, in either LRC spelling: `[mm:ss.xx]` or `[mm:ss:xx]`.
+  static final RegExp _timestamp = RegExp(
+    r'\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]',
+  );
+
+  /// Parses LRC text into sorted, timed lines.
+  ///
+  /// Three details the format allows and this has to get right: a line may
+  /// carry **several** timestamps (the same words repeated later, as in a
+  /// chorus), the timestamp's fraction may be centiseconds or milliseconds, and
+  /// metadata tags (`[ar:…]`) look like timestamps but are not.
+  static List<LyricLine> linesFromLrc(String lrc) {
+    final lines = <LyricLine>[];
+    for (final raw in lrc.split('\n')) {
+      final matches = _timestamp.allMatches(raw).toList();
+      if (matches.isEmpty) continue;
+      // The words follow the last timestamp; every timestamp before it on the
+      // same line refers to those same words.
+      final text = raw.substring(matches.last.end).trim();
+      for (final match in matches) {
+        lines.add(LyricLine(at: _timeOf(match), text: text));
+      }
+    }
+    lines.sort((a, b) => a.at.compareTo(b.at));
+    return List<LyricLine>.unmodifiable(lines);
+  }
+
+  static Duration _timeOf(RegExpMatch match) {
+    final fraction = match.group(3);
+    var milliseconds = 0;
+    if (fraction != null && fraction.isNotEmpty) {
+      // `.5`, `.50` and `.500` all mean 500 ms: pad right, then take three
+      // digits. Reading the fraction as a plain integer instead would turn
+      // `.5` into 5 ms and put the line two beats early.
+      milliseconds = int.parse(fraction.padRight(3, '0').substring(0, 3));
+    }
+    return Duration(
+      minutes: int.parse(match.group(1)!),
+      seconds: int.parse(match.group(2)!),
+      milliseconds: milliseconds,
+    );
+  }
 
   /// Reads one LRCLIB response.
   ///
@@ -70,7 +171,7 @@ class Lyrics {
   static String plainFromLrc(String lrc) {
     final out = <String>[];
     for (final raw in lrc.split('\n')) {
-      final line = raw.replaceAll(RegExp(r'\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\]'), '');
+      final line = raw.replaceAll(_timestamp, '');
       final trimmed = line.trim();
       if (trimmed.isEmpty) continue;
       if (RegExp(r'^\[[a-zA-Z#]+:.*\]$').hasMatch(trimmed)) continue;
@@ -115,7 +216,8 @@ class LrcLibLyrics implements LyricsSource {
   late final HostGovernor _governor;
 
   /// Identifies the app, as LRCLIB's guidance asks.
-  static const String userAgent = 'Gandar/1.0 (https://github.com/snokfr/Gandar)';
+  static const String userAgent =
+      'Gandar/1.0 (https://github.com/snokfr/Gandar)';
 
   static const String _base = 'https://lrclib.net/api';
 

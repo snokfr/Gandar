@@ -9,6 +9,7 @@ import '../../domain/models/track.dart';
 import '../../state/playback_controller.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
+import 'lyrics_view.dart';
 import 'share_links.dart';
 
 /// Formats a duration as `m:ss` (or `h:mm:ss` for long media).
@@ -39,15 +40,23 @@ class PlaybackScope extends ConsumerWidget {
   }
 }
 
-/// The seek bar. Rebuilds only for position/duration updates.
+/// The seek bar, with the elapsed time, the track's length and the time left.
+///
+/// All three, because they answer different questions: how far into the song
+/// you are, how long it is, and how much is left — and the last one is what
+/// decides whether to start something else.
 class _SeekBar extends StatelessWidget {
-  const _SeekBar({super.key, required this.controller});
+  const _SeekBar({super.key, required this.controller, this.dense = false});
 
   final PlaybackController controller;
 
+  /// Sized for the 84 px playback bar. A default [Slider] is 48 px tall on its
+  /// own, which with the transport buttons above it left no room for the times
+  /// and got them clipped instead — a bar with no time on it at all.
+  final bool dense;
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return ValueListenableBuilder<Duration>(
       valueListenable: controller.positionNotifier,
       builder: (context, position, _) {
@@ -55,41 +64,51 @@ class _SeekBar extends StatelessWidget {
           valueListenable: controller.durationNotifier,
           builder: (context, duration, _) {
             final total = duration.inMilliseconds;
-            final value = total <= 0
-                ? 0.0
-                : position.inMilliseconds.clamp(0, total).toDouble();
+            final known = total > 0;
+            final elapsed = known ? position : Duration.zero;
+            final left = known ? duration - position : Duration.zero;
+            final value = known
+                ? position.inMilliseconds.clamp(0, total).toDouble()
+                : 0.0;
+
+            final slider = SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 3,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape: RoundSliderOverlayShape(
+                  overlayRadius: dense ? 12 : 18,
+                ),
+              ),
+              child: Slider(
+                value: value,
+                max: known ? total.toDouble() : 1,
+                onChanged: known
+                    ? (v) => controller.seek(Duration(milliseconds: v.round()))
+                    : null,
+              ),
+            );
+
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    trackHeight: 3,
-                    thumbShape: const RoundSliderThumbShape(
-                      enabledThumbRadius: 6,
-                    ),
-                  ),
-                  child: Slider(
-                    value: value,
-                    max: total <= 0 ? 1 : total.toDouble(),
-                    onChanged: total <= 0
-                        ? null
-                        : (v) => controller.seek(
-                            Duration(milliseconds: v.round()),
-                          ),
-                  ),
-                ),
+                if (dense) SizedBox(height: 22, child: slider) else slider,
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        formatDuration(position),
-                        style: theme.textTheme.bodySmall,
+                      _TimeLabel(
+                        text: formatDuration(elapsed),
+                        semantics: 'Elapsed',
                       ),
-                      Text(
-                        formatDuration(duration),
-                        style: theme.textTheme.bodySmall,
+                      _TimeLabel(
+                        text: formatDuration(duration),
+                        semantics: 'Total length',
+                      ),
+                      _TimeLabel(
+                        text:
+                            '-${formatDuration(left.isNegative ? Duration.zero : left)}',
+                        semantics: 'Time remaining',
                       ),
                     ],
                   ),
@@ -103,11 +122,71 @@ class _SeekBar extends StatelessWidget {
   }
 }
 
+/// One of the playback bar's trailing controls.
+///
+/// Fixed at 36 px rather than the default 48: five of these plus the volume
+/// slider have to fit 300 px, and the default size is what made them overflow
+/// their box and take the last one off the bar with them.
+class _BarIconButton extends StatelessWidget {
+  const _BarIconButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+    this.color,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      iconSize: 20,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+      icon: Icon(icon, color: color),
+    );
+  }
+}
+
+/// A time read-out. Three bare `1:04`s in a row read as noise to a screen
+/// reader, so each one says which of the three it is.
+class _TimeLabel extends StatelessWidget {
+  const _TimeLabel({required this.text, required this.semantics});
+
+  final String text;
+  final String semantics;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: semantics,
+      value: text,
+      child: ExcludeSemantics(
+        child: Text(text, style: Theme.of(context).textTheme.bodySmall),
+      ),
+    );
+  }
+}
+
 class _TransportControls extends StatelessWidget {
-  const _TransportControls({required this.controller, this.iconSize = 26});
+  const _TransportControls({
+    required this.controller,
+    this.iconSize = 26,
+    this.dense = false,
+  });
 
   final PlaybackController controller;
   final double iconSize;
+
+  /// Tightens the tap targets to fit the playback bar's fixed height. Still
+  /// above the 36 px minimum a desktop pointer needs; there is no room for the
+  /// full 48.
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
@@ -119,6 +198,10 @@ class _TransportControls extends StatelessWidget {
         IconButton(
           tooltip: 'Previous',
           iconSize: iconSize,
+          padding: dense ? EdgeInsets.zero : null,
+          constraints: dense
+              ? const BoxConstraints.tightFor(width: 38, height: 36)
+              : null,
           onPressed: hasTrack ? controller.previous : null,
           icon: const Icon(Icons.skip_previous),
         ),
@@ -133,7 +216,7 @@ class _TransportControls extends StatelessWidget {
               customBorder: const CircleBorder(),
               onTap: hasTrack ? controller.togglePlayPause : null,
               child: Padding(
-                padding: const EdgeInsets.all(8),
+                padding: EdgeInsets.all(dense ? 6 : 8),
                 child: Icon(
                   controller.isPlaying ? Icons.pause : Icons.play_arrow,
                   size: iconSize + 2,
@@ -147,6 +230,10 @@ class _TransportControls extends StatelessWidget {
         IconButton(
           tooltip: 'Next',
           iconSize: iconSize,
+          padding: dense ? EdgeInsets.zero : null,
+          constraints: dense
+              ? const BoxConstraints.tightFor(width: 38, height: 36)
+              : null,
           onPressed: hasTrack ? controller.next : null,
           icon: const Icon(Icons.skip_next),
         ),
@@ -166,117 +253,145 @@ class PlayerBar extends ConsumerWidget {
       builder: (context, controller) {
         final track = controller.currentTrack;
         return Container(
-          height: 84,
+          height: 88,
           decoration: BoxDecoration(
             color: tokens.surfaceElevatedColor.withValues(alpha: 0.96),
             border: Border(top: BorderSide(color: tokens.borderColor)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 260,
-                child: track == null
-                    ? Text(
-                        'Nothing playing',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      )
-                    : Row(
-                        children: [
-                          AlbumArt(url: track.artworkUrl, size: 52),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  track.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium,
-                                ),
-                                Text(
-                                  track.artists.join(', '),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ],
+          // Without this, every IconButton keeps a 48x48 minimum tap target
+          // whatever constraints it is given, which is what made this bar
+          // overflow: the buttons above the seek bar and the five controls on
+          // its right both want more room than the bar has.
+          child: Theme(
+            data: Theme.of(
+              context,
+            ).copyWith(materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 260,
+                  child: track == null
+                      ? Text(
+                          'Nothing playing',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        )
+                      : Row(
+                          children: [
+                            AlbumArt(url: track.artworkUrl, size: 52),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    track.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium,
+                                  ),
+                                  Text(
+                                    track.artists.join(', '),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall,
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-              ),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _TransportControls(controller: controller),
-                    SizedBox(
-                      width: 460,
-                      child: _SeekBar(controller: controller),
-                    ),
-                  ],
+                          ],
+                        ),
                 ),
-              ),
-              SizedBox(
-                width: 260,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    IconButton(
-                      tooltip: 'Shuffle',
-                      onPressed: () => ref
-                          .read(playbackSettingsProvider.notifier)
-                          .update(
-                            controller.settings.copyWith(
-                              shuffleMode:
-                                  controller.settings.shuffleMode ==
-                                      ShuffleMode.off
-                                  ? ShuffleMode.standard
-                                  : ShuffleMode.off,
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _TransportControls(
+                        controller: controller,
+                        iconSize: 24,
+                        dense: true,
+                      ),
+                      // A ceiling, not a fixed width: the bar is laid out at
+                      // whatever the window gives it, and a hard 460 px inside
+                      // an Expanded overflows as soon as the window is narrower
+                      // than the three groups want it to be.
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 520),
+                        child: _SeekBar(controller: controller, dense: true),
+                      ),
+                    ],
+                  ),
+                ),
+                // 300 px for five buttons, a volume glyph and a slider. The
+                // default 48 px IconButton tap target does not fit five of them
+                // here, and the group overflowed its box — which is where the
+                // Share button went missing from the bar.
+                SizedBox(
+                  width: 300,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      _BarIconButton(
+                        tooltip: 'Shuffle',
+                        onPressed: () => ref
+                            .read(playbackSettingsProvider.notifier)
+                            .update(
+                              controller.settings.copyWith(
+                                shuffleMode:
+                                    controller.settings.shuffleMode ==
+                                        ShuffleMode.off
+                                    ? ShuffleMode.standard
+                                    : ShuffleMode.off,
+                              ),
                             ),
-                          ),
-                      icon: Icon(
-                        Icons.shuffle,
+                        icon: Icons.shuffle,
                         color:
                             controller.settings.shuffleMode == ShuffleMode.off
                             ? tokens.textSecondaryColor
                             : tokens.accentColor,
                       ),
-                    ),
-                    Icon(
-                      Icons.volume_up,
-                      color: tokens.textSecondaryColor,
-                      size: 20,
-                    ),
-                    SizedBox(
-                      width: 120,
-                      child: Slider(
-                        value: controller.volume,
-                        max: 1,
-                        onChanged: controller.setVolume,
+                      Icon(
+                        Icons.volume_up,
+                        color: tokens.textSecondaryColor,
+                        size: 18,
                       ),
-                    ),
-                    IconButton(
-                      tooltip: 'Share',
-                      onPressed: track == null
-                          ? null
-                          : () => showShareSheet(context, ref, track),
-                      icon: const Icon(Icons.ios_share),
-                    ),
-                    IconButton(
-                      tooltip: 'Now playing',
-                      onPressed: () => openNowPlaying(context),
-                      icon: const Icon(Icons.keyboard_arrow_up),
-                    ),
-                  ],
+                      SizedBox(
+                        width: 84,
+                        child: Slider(
+                          value: controller.volume,
+                          max: 1,
+                          onChanged: controller.setVolume,
+                        ),
+                      ),
+                      _BarIconButton(
+                        tooltip: 'Lyrics',
+                        onPressed: track == null
+                            ? null
+                            : () => showLyricsSheet(context, track),
+                        icon: Icons.lyrics_outlined,
+                      ),
+                      _BarIconButton(
+                        tooltip: 'Share',
+                        onPressed: track == null
+                            ? null
+                            : () => showShareSheet(context, ref, track),
+                        icon: Icons.ios_share,
+                      ),
+                      _BarIconButton(
+                        tooltip: 'Now playing',
+                        onPressed: () => openNowPlaying(context),
+                        icon: Icons.keyboard_arrow_up,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -474,7 +589,9 @@ Future<void> showShareSheet(
               );
               if (sheetContext.mounted) Navigator.of(sheetContext).pop();
               messenger.showSnackBar(
-                const SnackBar(content: Text('Copied the track and its links.')),
+                const SnackBar(
+                  content: Text('Copied the track and its links.'),
+                ),
               );
             },
           ),
@@ -681,11 +798,26 @@ class _LyricsSection extends ConsumerWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SectionHeader(title: 'Lyrics', subtitle: lyrics.attribution),
+                SectionHeader(
+                  title: 'Lyrics',
+                  subtitle: lyrics.hasSynced
+                      ? '${lyrics.attribution} · following the song'
+                      : lyrics.attribution,
+                  action: OutlinedButton.icon(
+                    onPressed: () => showLyricsSheet(context, track),
+                    icon: const Icon(Icons.open_in_full, size: 18),
+                    label: const Text('Full lyrics'),
+                  ),
+                ),
                 const SizedBox(height: 8),
-                SelectableText(
-                  lyrics.plain,
-                  style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+                SyncedLyricsView(
+                  lyrics: lyrics,
+                  position: ref
+                      .watch(playbackControllerProvider)
+                      .positionNotifier,
+                  // This sheet is already a scrollable; a second scroll view
+                  // inside it would fight it for the drag.
+                  scrollable: false,
                 ),
               ],
             );

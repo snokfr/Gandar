@@ -49,9 +49,18 @@ Metadata comes from Spotify; the audio never does.
 
 **Player**
 
-- **Lyrics** for the current track, from [LRCLIB](https://lrclib.net) — free,
-  open and keyless, with time-synced lyrics reduced to plain text. A missing
-  lyric is reported as a sentence, not an empty box.
+- **Lyrics on a button in the playback bar.** One tap opens the words for
+  whatever is playing, from [LRCLIB](https://lrclib.net) — free, open and
+  keyless.
+- **The current line is highlighted as it is sung** when the source is
+  time-synced, following the player's own clock: seeking moves the highlight
+  with the audio, pausing holds it, and nothing is lit up during a long
+  instrumental intro. Times when the track has only plain words, and says which
+  of the two it is rather than pretending. A missing lyric is a sentence, not an
+  empty box.
+- **Elapsed, total length and time remaining** on the playback bar, all three,
+  so you can see how far in you are *and* decide whether there is time for
+  another track.
 - **Share** any track as a YouTube or a Spotify link, whichever service knows
   it. A track that came from Spotify also offers its resolved YouTube video,
   because that mapping is already stored locally. Every list row is
@@ -343,8 +352,11 @@ playlist).
   may change it without notice. Long playlists and your own liked songs are
   covered by the file import instead.
 - **Lyrics come from a community database.** LRCLIB has none for a fair share
-  of tracks, and those say so rather than showing an empty panel. Time-synced
-  lyrics are reduced to plain text: there is no karaoke highlighting yet.
+  of tracks, and those say so rather than showing an empty panel. Highlighting
+  needs the source's timestamps: for a track whose lyrics are plain text there
+  is nothing to follow, and the sheet says so instead of guessing. The sync is
+  also the lyric's own, so a DJ edit, a live version or a track played from a
+  different master can drift.
 - **The feed's channel matching is a heuristic.** It searches YouTube for the
   artist and prefers the first result whose channel name contains the artist's,
   so a short or common name can pick the wrong channel. It is labelled as a
