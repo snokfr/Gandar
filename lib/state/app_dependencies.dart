@@ -1,14 +1,12 @@
 import 'dart:async';
 
+import '../core/logging/app_logger.dart';
 import '../core/settings/playback_settings.dart';
 import '../core/settings/settings_repository.dart';
 import '../core/theme/theme_presets.dart';
 import '../core/theme/theme_tokens.dart';
 import '../data/cache/cache_manager.dart';
 import '../data/repositories/local_repositories.dart';
-import '../data/spotify/spotify_api.dart';
-import '../data/spotify/spotify_auth.dart';
-import '../data/spotify/spotify_tokens.dart';
 import '../data/storage/app_database.dart';
 import '../data/youtube/youtube_explode_resolver.dart';
 import '../domain/repositories/repositories.dart';
@@ -21,6 +19,10 @@ import 'playback_controller.dart';
 ///
 /// Holding these in one object keeps Riverpod providers trivial and makes the
 /// whole graph swappable in tests.
+///
+/// Note what is *not* here: any Spotify account, token or client id. Gandar
+/// reads public pages and imported files instead, so there is no session to
+/// keep alive and nothing to sign into.
 class AppDependencies {
   AppDependencies({
     required this.database,
@@ -28,7 +30,6 @@ class AppDependencies {
     required this.playbackSettings,
     required this.activeTheme,
     required this.customThemes,
-    required this.spotifyApi,
     required this.mappingRepository,
     required this.cacheRepository,
     required this.libraryRepository,
@@ -36,7 +37,7 @@ class AppDependencies {
     required this.audioResolver,
     required this.audioEngine,
     required this.playbackController,
-    this.clientId = '',
+    this.logLevel = LogLevel.info,
   });
 
   final AppDatabase database;
@@ -45,7 +46,6 @@ class AppDependencies {
   final ThemeTokens activeTheme;
   final List<ThemeTokens> customThemes;
 
-  final SpotifyApi spotifyApi;
   final MappingRepository mappingRepository;
   final CacheRepository cacheRepository;
   final LibraryRepository libraryRepository;
@@ -54,21 +54,21 @@ class AppDependencies {
   final AudioEngine audioEngine;
   final PlaybackController playbackController;
 
-  /// Spotify application client id (empty until the user configures it).
-  final String clientId;
+  /// Log verbosity in force at startup.
+  final LogLevel logLevel;
 
   /// Builds the production dependency graph.
-  ///
-  /// [clientId] must be supplied by configuration; without it the app still
-  /// runs (themes, settings, local library) but sign-in is unavailable.
   static Future<AppDependencies> bootstrap({
     required AppDatabase database,
     required SettingsRepository settingsRepository,
     required AudioEngine audioEngine,
-    required String clientId,
-    OAuthBrowser? browser,
-    TokenStore? tokenStore,
   }) async {
+    // Apply the saved log level before anything noisy happens.
+    final savedLevel = LogLevel.byName(
+      await settingsRepository.loadLogLevelName() ?? '',
+    );
+    if (savedLevel != null) AppLogger.instance.minLevel = savedLevel;
+
     final playbackSettings = await settingsRepository.loadPlayback();
     final customThemes = await settingsRepository.loadCustomThemes();
     final activeId = await settingsRepository.loadActiveThemeId();
@@ -78,13 +78,6 @@ class AppDependencies {
     final cacheRepository = DriftCacheRepository(database);
     final libraryRepository = DriftLibraryRepository(database);
     final cacheManager = CacheManager(repository: cacheRepository);
-
-    final auth = SpotifyAuthService(
-      config: SpotifyAuthConfig(clientId: clientId),
-      tokenStore: tokenStore ?? SecureTokenStore(),
-      browser: browser ?? LoopbackOAuthBrowser(port: 8888),
-    );
-    final spotifyApi = SpotifyApi(auth: auth);
 
     final resolver = YoutubeExplodeResolver(mappings: mappingRepository);
     final preloader = StreamPreloader(resolver: resolver);
@@ -113,7 +106,6 @@ class AppDependencies {
       playbackSettings: playbackSettings,
       activeTheme: activeTheme,
       customThemes: customThemes,
-      spotifyApi: spotifyApi,
       mappingRepository: mappingRepository,
       cacheRepository: cacheRepository,
       libraryRepository: libraryRepository,
@@ -121,7 +113,7 @@ class AppDependencies {
       audioResolver: resolver,
       audioEngine: audioEngine,
       playbackController: controller,
-      clientId: clientId,
+      logLevel: AppLogger.instance.minLevel,
     );
   }
 

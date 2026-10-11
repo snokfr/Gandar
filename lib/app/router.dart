@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 
-import '../features/auth/sign_in_page.dart';
+import '../features/albums/albums_page.dart';
+import '../features/import/import_page.dart';
 import '../features/library/library_page.dart';
 import '../features/playlists/playlists_page.dart';
 import '../features/search/search_page.dart';
@@ -32,8 +33,24 @@ GoRouter buildRouter() {
             ],
           ),
           GoRoute(
+            path: '/albums',
+            builder: (context, state) => const AlbumsPage(),
+            routes: <RouteBase>[
+              GoRoute(
+                path: ':id',
+                builder: (context, state) => AlbumDetailPage(
+                  albumId: state.pathParameters['id']!,
+                ),
+              ),
+            ],
+          ),
+          GoRoute(
             path: '/search',
             builder: (context, state) => const SearchPage(),
+          ),
+          GoRoute(
+            path: '/import',
+            builder: (context, state) => const ImportPage(),
           ),
           GoRoute(
             path: '/themes',
@@ -45,7 +62,6 @@ GoRouter buildRouter() {
           ),
         ],
       ),
-      GoRoute(path: '/signin', builder: (context, state) => const SignInPage()),
     ],
   );
 }

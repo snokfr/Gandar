@@ -2,11 +2,8 @@ name: Release
 
 # Publishes downloadable builds when a version tag (e.g. v0.1.0) is pushed.
 #
-# The published builds deliberately carry NO Spotify client id. Baking one into
-# a public artifact would hand every downloader the maintainer's client id, so
-# instead these builds start without sign-in and direct the user to the
-# instructions in README.md. Users who want a working sign-in build run
-# `flutter build ... --dart-define=SPOTIFY_CLIENT_ID=their_own_id` locally.
+# No secrets are needed: Gandar has no account, no token and no client id, so a
+# build is reproducible from the source alone.
 #
 # Linux and macOS desktop builds are intentionally absent: they need their own
 # media_kit_libs_* packages and a verified build before they can ship. Add them
@@ -49,7 +46,6 @@ jobs:
           flutter test
 
       - name: Build Windows release
-        # No --dart-define: see the note at the top of this file.
         run: flutter build windows --release
 
       - name: Package Windows build
@@ -88,7 +84,6 @@ jobs:
         run: dart run build_runner build
 
       - name: Build APK
-        # No --dart-define: see the note at the top of this file.
         run: flutter build apk --release
 
       - uses: actions/upload-artifact@v4
@@ -114,14 +109,13 @@ jobs:
           body: |
             ## Downloading a build
 
-            These builds ship **without a Spotify client id**, so the sign-in
-            button explains that a client id is required. To get a build you can
-            actually sign in with, follow the steps in the README and build
-            locally:
+            Unzip it and run `Gandar.exe` from inside the folder — the
+            executable needs the DLLs and the `data/` directory next to it.
 
-            ```bash
-            flutter build windows --release --dart-define=SPOTIFY_CLIENT_ID=your_own_client_id
-            ```
+            There is nothing to configure: the app has no account and no
+            sign-in. Add music from the **Import** screen, either by pasting a
+            public Spotify link or by importing an Exportify CSV / Spotify
+            `YourLibrary.json` file.
 
             ### About the Android APK
 

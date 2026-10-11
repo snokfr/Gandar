@@ -33,6 +33,18 @@ class Track {
 
   Duration get duration => Duration(milliseconds: durationMs);
 
+  /// A copy carrying [url] as its artwork, for the enrichment pass.
+  Track withArtwork(String url) => Track(
+    id: id,
+    title: title,
+    artists: artists,
+    album: album,
+    durationMs: durationMs,
+    artworkUrl: url,
+    isrc: isrc,
+    addedAt: addedAt,
+  );
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'title': title,

@@ -65,16 +65,16 @@ void main() {
       _wrap(
         const EmptyState(
           icon: Icons.library_music_outlined,
-          title: 'No liked songs yet',
-          message: 'Sign in to Spotify.',
-          action: FilledButton(onPressed: null, child: Text('Sign in')),
+          title: 'Your library is empty',
+          message: 'Import a library file to begin.',
+          action: FilledButton(onPressed: null, child: Text('Import music')),
         ),
       ),
     );
 
-    expect(find.text('No liked songs yet'), findsOneWidget);
-    expect(find.text('Sign in to Spotify.'), findsOneWidget);
-    expect(find.text('Sign in'), findsOneWidget);
+    expect(find.text('Your library is empty'), findsOneWidget);
+    expect(find.text('Import a library file to begin.'), findsOneWidget);
+    expect(find.text('Import music'), findsOneWidget);
   });
 
   testWidgets('SectionHeader shows title, subtitle and action', (tester) async {

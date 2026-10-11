@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/errors/failure_text.dart';
 import '../../domain/models/playlist.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
 
-/// Lists the user's Spotify playlists.
+/// Lists the playlists and albums that were imported into Gandar.
 class PlaylistsPage extends ConsumerWidget {
   const PlaylistsPage({super.key});
 
@@ -16,21 +17,32 @@ class PlaylistsPage extends ConsumerWidget {
     return Scaffold(
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => EmptyState(
-          icon: Icons.cloud_off,
-          title: 'Could not load playlists',
-          message: '$e',
-          action: FilledButton(
-            onPressed: () => ref.invalidate(playlistsProvider),
-            child: const Text('Retry'),
-          ),
-        ),
+        error: (e, _) {
+          final failure = describeFailure(e);
+          return EmptyState(
+            icon: Icons.cloud_off,
+            title: 'Could not read your playlists',
+            message: failure.message,
+            action: FailureAction(
+              failure: failure,
+              onRetry: () => ref.invalidate(playlistsProvider),
+            ),
+          );
+        },
         data: (playlists) {
           if (playlists.isEmpty) {
-            return const EmptyState(
+            return EmptyState(
               icon: Icons.queue_music_outlined,
-              title: 'No playlists found',
-              message: 'Create a playlist in Spotify and it will show up here.',
+              title: 'No playlists yet',
+              message:
+                  'Paste a Spotify playlist or album link and it is stored '
+                  'here, ready to play offline. For your own library, export it '
+                  'with Exportify and import the file.',
+              action: FilledButton.icon(
+                onPressed: () => context.go('/import'),
+                icon: const Icon(Icons.download_outlined),
+                label: const Text('Import a playlist'),
+              ),
             );
           }
           return CustomScrollView(
@@ -126,15 +138,18 @@ class PlaylistDetailPage extends ConsumerWidget {
       ),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => EmptyState(
-          icon: Icons.error_outline,
-          title: 'Could not load this playlist',
-          message: '$e',
-          action: FilledButton(
-            onPressed: () => ref.invalidate(playlistTracksProvider(playlistId)),
-            child: const Text('Retry'),
-          ),
-        ),
+        error: (e, _) {
+          final failure = describeFailure(e);
+          return EmptyState(
+            icon: Icons.error_outline,
+            title: 'Could not load this playlist',
+            message: failure.message,
+            action: FailureAction(
+              failure: failure,
+              onRetry: () => ref.invalidate(playlistTracksProvider(playlistId)),
+            ),
+          );
+        },
         data: (tracks) {
           if (tracks.isEmpty) {
             return const EmptyState(

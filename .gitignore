@@ -2,6 +2,7 @@
 *.class
 *.log
 *.pyc
+__pycache__/
 *.swp
 .DS_Store
 .atom/
@@ -32,6 +33,9 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+
+# Release builds produced by tool/build_release.sh
+/dist/
 
 # Symbolication related
 app.*.symbols

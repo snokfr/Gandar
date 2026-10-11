@@ -6,14 +6,14 @@ inward: `features` → `state` → `data`/`playback` → `domain` → `core`. No
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ features/   screens: library, playlists, search, player,     │
-│             settings, themes, auth                           │
+│ features/   screens: library, playlists, search, import,     │
+│             player, settings, themes                         │
 ├──────────────────────────────────────────────────────────────┤
 │ state/      Riverpod providers, AppDependencies,             │
 │             PlaybackController                               │
 ├──────────────────────────────────────────────────────────────┤
-│ data/       SpotifyClient + PKCE auth · YouTube resolver ·    │
-│             drift database · cache manager                   │
+│ data/       public-page reads · file import · artwork ·       │
+│             YouTube resolver · drift database · cache         │
 │ playback/   AudioEngine (media_kit) · filters · crossfade ·   │
 │             queue + shuffle · preloader                      │
 ├──────────────────────────────────────────────────────────────┤
@@ -68,17 +68,25 @@ implementation can be dropped in without touching `PlaybackController`.
 **Stream URLs are treated as temporary.** They are signed and short-lived, so
 they are never persisted; only the *video id* mapping is cached permanently.
 
-### Hand-rolled PKCE instead of an auth plugin
+### No Spotify account at all
 
-Desktop and mobile clients cannot keep a client secret, so Spotify's
-Authorization Code + PKCE flow is the correct one. Implementing it directly
-means:
-- no native plugin to keep working across Windows/Linux/macOS/Android,
-- the loopback redirect listener and token exchange are ordinary Dart that
-  tests can drive with a fake browser and a fake HTTP transport,
-- tokens live in `flutter_secure_storage` and nowhere else.
+There used to be an Authorization Code + PKCE flow here: a client id, a loopback
+redirect listener, tokens in the platform credential store, and a Web API client
+that paged liked songs and playlists. It was removed rather than fixed.
 
-`OAuthBrowser` is an interface specifically so tests never open a real browser.
+Since February 2026 Spotify refuses every Web API request from a
+Development-mode app whose owner has no Premium subscription. The account-based
+path was therefore unusable for most people — an empty library and an
+explanation — while the app's own features never needed Spotify at all. Deleting
+it removed a client id, a token store, two dependencies
+(`flutter_secure_storage`, `url_launcher`), the whole auth surface, and the
+question of what happens when a session expires.
+
+What replaced it: **public embed pages** (`open.spotify.com/embed/<kind>/<id>`,
+the same page Spotify's own widget uses) for links, and **file import** for a
+personal library, since liked songs are account data and are never public.
+Neither route can be revoked by a subscription status, and neither can break
+because a token was not refreshed.
 
 ### `drift` for the database
 
@@ -86,7 +94,7 @@ Four of the five tables exist for speed, not storage:
 
 | Table | Purpose |
 | --- | --- |
-| `mappings` | Permanent `spotify_track_id → video_id` cache: instant replay |
+| `mappings` | Permanent `track id → video_id` cache: instant replay |
 | `cache_entries` | LRU bookkeeping keyed by `last_played_at` |
 | `tracks`, `playlists` | Offline-first library listing |
 | `play_history` | Feeds smart shuffle's "recently played" set |
@@ -121,8 +129,8 @@ platform requests reduced motion.
 Platform edges are faked, logic is not:
 
 - `FakeAudioEngine` replaces libmpv for transport tests.
-- `FakeHttpAdapter` replaces Dio's transport for Spotify tests.
-- `FakeOAuthBrowser` replaces the system browser for auth tests.
+- `FakeHttpAdapter` replaces Dio's transport for the public-page and artwork
+  clients.
 - `FakeFileStore` replaces the disk for eviction tests.
 - drift repositories are tested against a real in-memory SQLite database.
 
@@ -133,8 +141,7 @@ theme codecs, cache policy — is pure enough to test directly.
 
 **Phase 2 — Android.** Add `media_kit_libs_android_audio`, an
 `audio_service`-style foreground service for background playback, MediaSession
-notifications and lock-screen controls, and an Android custom-scheme redirect
-for OAuth (the loopback listener becomes the desktop path).
+notifications and lock-screen controls.
 
 **Phase 3 — Releases.** GitHub Actions build Windows and Android artifacts on
 version tags and attach them to a GitHub Release.

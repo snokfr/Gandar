@@ -53,6 +53,9 @@ class PlaybackSettings {
     this.prefetchNextTrack = true,
     this.cacheMaxMegabytes = 2048,
     this.cacheMaxIdleDays = 30,
+    this.showYouTubeInSearch = true,
+    this.savingsAdSecondsPerTrack = 20.0,
+    this.savingsPremiumMonthlyCost = 11.99,
   });
 
   /// 10-band ISO center frequencies.
@@ -89,6 +92,16 @@ class PlaybackSettings {
   final int cacheMaxMegabytes;
   final int cacheMaxIdleDays;
 
+  /// Show YouTube results on the search screen.
+  final bool showYouTubeInSearch;
+
+  /// Assumed ad time a free music service would play per track, used only for
+  /// the savings estimate. Deliberately adjustable: it is a guess, not a fact.
+  final double savingsAdSecondsPerTrack;
+
+  /// What a paid music subscription costs per month, for the same estimate.
+  final double savingsPremiumMonthlyCost;
+
   PlaybackSettings copyWith({
     bool? eqEnabled,
     String? eqPreset,
@@ -103,6 +116,9 @@ class PlaybackSettings {
     bool? prefetchNextTrack,
     int? cacheMaxMegabytes,
     int? cacheMaxIdleDays,
+    bool? showYouTubeInSearch,
+    double? savingsAdSecondsPerTrack,
+    double? savingsPremiumMonthlyCost,
   }) {
     return PlaybackSettings(
       eqEnabled: eqEnabled ?? this.eqEnabled,
@@ -118,6 +134,11 @@ class PlaybackSettings {
       prefetchNextTrack: prefetchNextTrack ?? this.prefetchNextTrack,
       cacheMaxMegabytes: cacheMaxMegabytes ?? this.cacheMaxMegabytes,
       cacheMaxIdleDays: cacheMaxIdleDays ?? this.cacheMaxIdleDays,
+      showYouTubeInSearch: showYouTubeInSearch ?? this.showYouTubeInSearch,
+      savingsAdSecondsPerTrack:
+          savingsAdSecondsPerTrack ?? this.savingsAdSecondsPerTrack,
+      savingsPremiumMonthlyCost:
+          savingsPremiumMonthlyCost ?? this.savingsPremiumMonthlyCost,
     );
   }
 
@@ -127,6 +148,8 @@ class PlaybackSettings {
       crossfadeSeconds: crossfadeSeconds.clamp(0.0, 12.0).toDouble(),
       cacheMaxMegabytes: math.max(128, cacheMaxMegabytes),
       cacheMaxIdleDays: math.max(1, cacheMaxIdleDays),
+      savingsAdSecondsPerTrack: savingsAdSecondsPerTrack.clamp(0.0, 300.0),
+      savingsPremiumMonthlyCost: savingsPremiumMonthlyCost.clamp(0.0, 100.0),
       eqBands: _normalizeBands(eqBands),
     );
   }
@@ -152,6 +175,9 @@ class PlaybackSettings {
     'prefetchNextTrack': prefetchNextTrack,
     'cacheMaxMegabytes': cacheMaxMegabytes,
     'cacheMaxIdleDays': cacheMaxIdleDays,
+    'showYouTubeInSearch': showYouTubeInSearch,
+    'savingsAdSecondsPerTrack': savingsAdSecondsPerTrack,
+    'savingsPremiumMonthlyCost': savingsPremiumMonthlyCost,
   };
 
   static PlaybackSettings fromJson(Map<String, dynamic> j) {
@@ -182,6 +208,11 @@ class PlaybackSettings {
       prefetchNextTrack: j['prefetchNextTrack'] as bool? ?? true,
       cacheMaxMegabytes: (j['cacheMaxMegabytes'] as num?)?.toInt() ?? 2048,
       cacheMaxIdleDays: (j['cacheMaxIdleDays'] as num?)?.toInt() ?? 30,
+      showYouTubeInSearch: j['showYouTubeInSearch'] as bool? ?? true,
+      savingsAdSecondsPerTrack:
+          (j['savingsAdSecondsPerTrack'] as num?)?.toDouble() ?? 20.0,
+      savingsPremiumMonthlyCost:
+          (j['savingsPremiumMonthlyCost'] as num?)?.toDouble() ?? 11.99,
     ).sanitized();
   }
 
@@ -201,6 +232,9 @@ class PlaybackSettings {
           other.prefetchNextTrack == prefetchNextTrack &&
           other.cacheMaxMegabytes == cacheMaxMegabytes &&
           other.cacheMaxIdleDays == cacheMaxIdleDays &&
+          other.showYouTubeInSearch == showYouTubeInSearch &&
+          other.savingsAdSecondsPerTrack == savingsAdSecondsPerTrack &&
+          other.savingsPremiumMonthlyCost == savingsPremiumMonthlyCost &&
           _bandsEqual(other.eqBands, eqBands);
 
   static bool _bandsEqual(List<EqBand> a, List<EqBand> b) {
@@ -228,5 +262,8 @@ class PlaybackSettings {
     prefetchNextTrack,
     cacheMaxMegabytes,
     cacheMaxIdleDays,
+    showYouTubeInSearch,
+    savingsAdSecondsPerTrack,
+    savingsPremiumMonthlyCost,
   );
 }

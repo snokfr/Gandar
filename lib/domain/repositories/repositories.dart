@@ -1,32 +1,8 @@
 import '../models/cache_entry.dart';
+import '../models/play_record.dart';
 import '../models/playlist.dart';
 import '../models/resolved_stream.dart';
 import '../models/track.dart';
-
-/// Metadata layer backed by the Spotify Web API.
-abstract class SpotifyRepository {
-  Future<bool> isAuthenticated();
-
-  /// Signs in via Authorization Code + PKCE and stores tokens.
-  Future<void> signIn();
-
-  Future<void> signOut();
-
-  /// Paged: [offset]/[limit] follow Spotify's pagination.
-  Future<List<Track>> getLikedTracks({int offset = 0, int limit = 50});
-
-  Future<List<Playlist>> getPlaylists({int offset = 0, int limit = 50});
-
-  Future<List<Track>> getPlaylistTracks(
-    String playlistId, {
-    int offset = 0,
-    int limit = 100,
-  });
-
-  Future<void> saveTrack(String trackId);
-
-  Future<void> removeTrack(String trackId);
-}
 
 /// Audio extraction layer. Implementations resolve a [Track] to a playable
 /// direct stream. Deliberately swappable because YouTube extraction is fragile.
@@ -57,6 +33,32 @@ abstract class LibraryRepository {
   Future<List<Track>> cachedLikedTracks();
   Future<void> upsertPlaylists(List<Playlist> playlists);
   Future<List<Playlist>> cachedPlaylists();
+
+  /// Stores [tracks] as the complete contents of [playlist], in this order.
+  ///
+  /// Replaces whatever was stored before, and adds the playlist summary, so an
+  /// import is idempotent: importing the same link twice does not duplicate
+  /// rows. Tracks already in the library keep their metadata.
+  Future<void> replacePlaylistTracks(String playlistId, List<Track> tracks);
+
+  /// The locally stored contents of [playlist], in playlist order. Empty when
+  /// the playlist was never imported.
+  Future<List<Track>> cachedPlaylistTracks(String playlistId);
+
+  /// Drops [trackId] from the library, and from every playlist holding it.
+  ///
+  /// There is no server to tell: removing a track here removes it locally and
+  /// nothing else, which is the only promise this app can keep.
+  Future<void> removeTrack(String trackId);
+
+  /// Cached tracks that still have no artwork, newest first.
+  ///
+  /// The artwork pass reads this, which is what makes it resumable: a track
+  /// stops being returned the moment its cover is stored.
+  Future<List<Track>> tracksMissingArtwork({int limit = 500});
   Future<void> recordPlay(String trackId, DateTime at);
   Future<List<String>> recentTrackIds({int limit = 50});
+
+  /// Play history, oldest first, with durations where a track is cached.
+  Future<List<PlayRecord>> playHistory();
 }

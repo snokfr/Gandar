@@ -25,9 +25,11 @@ type warnings rather than suppressing them.
   the UI instead.
 - **Test the logic, fake the platform.** New behaviour should be testable
   without a real audio device, a real browser, or the network.
-- **Never commit credentials.** The Spotify client id is passed with
-  `--dart-define=SPOTIFY_CLIENT_ID=...`; there is no config file to check in.
-  Tokens belong in `flutter_secure_storage`.
+- **Never commit credentials, and do not add an account back in.** Gandar has
+  no Spotify account, no client id, no token store and no sign-in; music arrives
+  through public links and exported files. See
+  [docs/architecture.md](docs/architecture.md#no-spotify-account-at-all) for why
+  the account-based path was removed.
 
 ## Changing the database
 

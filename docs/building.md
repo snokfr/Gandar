@@ -64,38 +64,18 @@ flutter pub get
 dart run build_runner build
 
 # 3. Run it
-flutter run -d windows --dart-define=SPOTIFY_CLIENT_ID=your_client_id
+flutter run -d windows
 ```
 
 `flutter run -d windows` gives you hot reload: press `r` to reload, `R` to
 restart, `q` to quit.
 
-### The Spotify client id
+### There is nothing to configure
 
-Gandar takes the client id from a **compile-time define**, not a file, so
-nothing secret-shaped is ever committed:
-
-```
---dart-define=SPOTIFY_CLIENT_ID=abc123...
-```
-
-Without it the app still runs — themes, playback settings and the cache all
-work — and the sign-in screen tells you the variable is missing.
-
-To stop typing it, add a `--dart-define-from-file` file. That filename is
-already git-ignored, so there is nothing to remember:
-
-```jsonc
-// dart_defines.json  (in .gitignore — safe for your client id)
-{ "SPOTIFY_CLIENT_ID": "your_client_id" }
-```
-
-```bash
-flutter run -d windows --dart-define-from-file=dart_defines.json
-```
-
-See the [README](../README.md#1-register-a-spotify-application) for creating the
-Spotify app and the exact redirect URI.
+No client id, no token, no secret, no `--dart-define`. Gandar has no Spotify
+account: it reads public playlist pages and the library files you export
+yourself, both of which need no credentials. The library starts empty, so the
+first thing to do in a fresh run is open **Import**.
 
 ---
 
@@ -106,7 +86,7 @@ Run all three before committing; CI runs exactly these.
 ```bash
 dart format lib test                                                     # format
 flutter analyze                                                          # static analysis
-flutter test                                                             # 141 tests
+flutter test                                                             # 209 tests
 ```
 
 CI additionally fails on unformatted code:
@@ -120,18 +100,29 @@ dart format --output=none --set-exit-if-changed lib test
 ## 4. Release build — Windows
 
 ```bash
-flutter build windows --release --dart-define=SPOTIFY_CLIENT_ID=your_client_id
+flutter build windows --release
+# …copy the finished bundle somewhere fixed:
+./tool/build_release.sh
 ```
 
-Output:
+`tool/build_release.sh` is the recommended path: it clears the stale output
+directory first, builds, and then copies the whole bundle to **`dist/Gandar/`**,
+so the app is always at the same path no matter how often `build/` is cleaned:
 
 ```
-build/windows/x64/runner/Release/gandar.exe
+dist/Gandar/Gandar.exe      <- run this
+dist/Gandar/flutter_windows.dll, libmpv-2.dll, data/, …
 ```
 
-**Ship the whole `Release/` directory, not just the `.exe`.** The executable
-needs the DLLs next to it (`flutter_windows.dll`, `data/`, the media_kit mpv
-libraries). Zipping just the exe produces a build that crashes on launch.
+Add `--zip` for a `dist/gandar-windows-x64.zip` as well.
+
+**Ship the whole folder, not just the `.exe`.** The executable needs the DLLs
+next to it (`flutter_windows.dll`, `data/`, the media_kit mpv libraries). An exe
+on its own crashes on launch.
+
+The raw `flutter build` output lives at
+`build/windows/x64/runner/Release/`, which `flutter clean` deletes; that is why
+the release script copies out of it.
 
 Smoke-test the build before you publish it:
 
@@ -148,13 +139,14 @@ package:media_kit_libs_windows_audio registered.
 ```
 
 …and creates its database at
-`%APPDATA%\com.gandar\gandar\gandar.sqlite`. If the process exits immediately,
-run it from a terminal to read the error.
+`%APPDATA%\Roaming\com.gandar\gandar\gandar.sqlite`. If the process exits
+immediately, run it from a terminal to read the error, and check the newest file
+in `%APPDATA%\Roaming\com.gandar\gandar\logs\`.
 
 ### Packaging
 
 ```powershell
-Compress-Archive -Path build/windows/x64/runner/Release/* `
+Compress-Archive -Path dist/Gandar/* `
                  -DestinationPath gandar-windows-x64.zip -Force
 ```
 
@@ -179,11 +171,11 @@ the simplest portable artifact and is what the release workflow uploads.
 > feature.
 
 ```bash
-flutter build apk --release --dart-define=SPOTIFY_CLIENT_ID=your_client_id
+flutter build apk --release
 # -> build/app/outputs/flutter-apk/app-release.apk
 
 # Or an App Bundle for Play:
-flutter build appbundle --release --dart-define=SPOTIFY_CLIENT_ID=your_client_id
+flutter build appbundle --release
 ```
 
 ### Signing
@@ -210,10 +202,6 @@ following the [Flutter Android signing guide](https://docs.flutter.dev/deploymen
 Both `android/key.properties` and `*.jks` are already git-ignored, so a keystore
 cannot be committed by accident.
 
-Also note: the OAuth flow uses a loopback HTTP redirect, which is the desktop
-path. Android needs a custom-scheme redirect registered with Spotify, so the
-sign-in round trip will not work on Android until Phase 2 lands.
-
 ---
 
 ## 6. Automated releases (GitHub Actions)
@@ -229,9 +217,9 @@ Runs on every push to `main` and every pull request:
 | `analyze-and-test` (ubuntu) | `pub get` → `build_runner` → `dart format --set-exit-if-changed` → `analyze` → `test` |
 | `build-windows` (windows) | builds the Windows release and uploads it as a temporary artifact |
 
-CI needs **no secrets**. It compiles with a clearly fake placeholder client id
-(`ci-placeholder`), which is enough to exercise the build path. That artifact
-cannot sign in, which matches published releases — see below.
+
+CI needs **no secrets and no configuration**: the app has no account, so
+`flutter build` is the whole story.
 
 ### `.github/workflows/release.yml`
 
@@ -246,22 +234,9 @@ together with those dependencies.
 
 ### Cutting a release
 
-1. **No secret is needed, and none is configured.** The release workflow builds
-   with **no Spotify client id**, so a download cannot sign in. Baking one in
-   would hand your client id to every person who downloads a build, and that is
-   not a trade worth making for a public repository.
-
-   The sign-in screen in such a build explains what is missing. To get a build
-   you can actually sign in with, users build locally with their own id:
-
-   ```bash
-   flutter build windows --release --dart-define=SPOTIFY_CLIENT_ID=their_own_id
-   ```
-
-   > A **runtime "Spotify client id" field in Settings** would remove this
-   > limitation entirely: the id could be stored locally in
-   > `shared_preferences` and used to construct the auth config at startup. That
-   > is the recommended next step for this area.
+1. **No secret is needed, and none is configured.** The release workflow needs
+   no credentials at all: the published build is functionally identical to a
+   local one.
 
 2. Tag and push:
 
@@ -282,18 +257,17 @@ Run workflow** and pass the tag.
 
 | Path | Contents |
 | --- | --- |
-| `%APPDATA%\com.gandar\gandar\gandar.sqlite` | Drift database: cached tracks/playlists, Spotify→YouTube mappings, cache index, play history |
-| `%APPDATA%\com.gandar\gandar\shared_preferences.json` | Playback settings, active theme id, custom themes |
+| `%APPDATA%\Roaming\com.gandar\gandar\gandar.sqlite` | Drift database: the imported library and playlists, `track → video id` mappings, cache index, play history |
+| `%APPDATA%\Roaming\com.gandar\gandar\shared_preferences.json` | Playback settings, active theme id, custom themes |
+| `%APPDATA%\Roaming\com.gandar\gandar\logs\` | One log file per day |
+| `%APPDATA%\Roaming\com.gandar\gandar\temp\` | media_kit's temporary playlists — see the `PathAccessException` row in Troubleshooting |
 
 (On Linux/macOS these live under the equivalent application-support directory.)
 
-To reset Gandar to a fresh state, delete that folder. Deleting only
-`gandar.sqlite` clears the mapping and cache index but keeps your settings and
-themes.
-
-Tokens are **not** in either file — they are in the platform credential store
-(Windows Credential Manager, macOS Keychain, libsecret on Linux) via
-`flutter_secure_storage`.
+Two things are worth knowing about the library folder. It is a *copy*: deleting
+it removes nothing from Spotify, only from Gandar. And it contains no
+credentials, because the app has none — there is no token store to clear and no
+sign-out to perform.
 
 ---
 
@@ -303,10 +277,10 @@ The checks that were actually run for the Phase 1 delivery, in order:
 
 ```bash
 flutter analyze                                                  # exit 0, no issues
-flutter test                                                     # exit 0, 141 passed
+flutter test                                                     # exit 0, 209 passed
 dart format --output=none --set-exit-if-changed lib test          # exit 0
-flutter build windows --release                                  # exit 0
-./build/windows/x64/runner/Release/gandar.exe                    # launches, DB created
+./tool/build_release.sh                                          # exit 0, dist/Gandar/ refreshed
+dist/Gandar/Gandar.exe                                          # launches, DB created
 ```
 
 One of those tests, [../test/docs_examples_test.dart](../test/docs_examples_test.dart),
@@ -315,11 +289,27 @@ codec and round-trips it through both formats. It is there so the theme file
 format described in [styling.md](styling.md) cannot drift away from the code
 that reads it.
 
+When playback problems need explaining, the probes work without the app — they
+resolve and play the way Gandar does, with every message printed:
+
+```bash
+# which extraction clients still answer, what the CDN serves for each of their
+# URLs, and how they rate on a full-file range. This is how the VISIONOS client
+# was found, and it is the first thing to re-run when YouTube changes.
+dart run tool/client_matrix.dart "<videoId or search query>"
+# resolve one track the way the app does, then play it through mpv and watch
+# the position move: the end-to-end check that audio actually comes out
+LIBMPV_LIBRARY_PATH=dist/Gandar/libmpv-2.dll \
+  dart run tool/visionos_probe.dart "<search query>"
+# is the player itself fine? (no network involved)
+dart run tool/mpv_probe.dart --local 'C:\Windows\Media\Ring01.wav'
+```
+
 For the database, confirm the schema rather than assuming:
 
 ```bash
-python -c "import sqlite3;c=sqlite3.connect(r'%APPDATA%\com.gandar\gandar\gandar.sqlite');print([r[0] for r in c.execute(\"select name from sqlite_master where type='table'\")])"
-# expect: cache_entries, mappings, play_history, playlists, tracks
+python -c "import sqlite3;c=sqlite3.connect(r'%APPDATA%\Roaming\com.gandar\gandar\gandar.sqlite');print([r[0] for r in c.execute(\"select name from sqlite_master where type='table'\")])"
+# expect: cache_entries, mappings, play_history, playlist_tracks, playlists, tracks
 ```
 
 ---
@@ -332,9 +322,15 @@ python -c "import sqlite3;c=sqlite3.connect(r'%APPDATA%\com.gandar\gandar\gandar
 | `Unable to locate Android SDK` from `flutter doctor` | Android SDK not installed | Expected for desktop work; install Android Studio to enable Android builds |
 | `Could not find a suitable Visual Studio installation` | Missing the C++ workload | VS Installer → Modify → **Desktop development with C++** |
 | `Target of URI doesn't exist: '...app_database.g.dart'` | Generated code missing | `dart run build_runner build` |
-| Debug run logs `PathAccessException: ...media_kit.NativeReferenceHolder...` | media_kit's *debug-only* reference holder cannot write a temp lock file | Harmless, and it cannot happen in a release build — that code path returns immediately unless `kDebugMode` |
-| Spotify sign-in returns 403 / "User not registered" | The app is in Development mode and your account is not allow-listed | Add your account under **User Management** in the Spotify developer dashboard |
-| A track fails with a 403 or "All candidate videos failed" | YouTube changed its player responses, or this video has no usable audio-only stream | Expected fragility. Try another video for the same song; report the video id |
+| Pressing play does nothing, and the log shows `PathAccessException: Cannot create file, path = '\?\<temp>\<uuid>' (Access is denied, errno = 5)` | media_kit writes a temporary playlist into `Directory.systemTemp` before every playback, and something on the machine — an endpoint-protection or backup rule — refuses new files in `%TEMP%` from an unsigned binary | Gandar works around this: `[startup] playback temp: writable: <support>	emp` in the log means it found a directory it can write to and pointed media_kit there. If that line says *not writable* instead, allow new files in `%TEMP%` or run the build from a folder Windows trusts |
+| Playback produces no sound, and the log's last line is `resolved "…" in N ms` | The stream resolved but the engine never accepted it | Read the whole `[playback]` sequence in the log; the engine reports its state and names the track |
+| The Import screen opens no data, or `Spotify did not return the playlist data` | The link is private, made-for-you (Discover Weekly and friends), or Spotify changed its embed page | Public and collaborative playlists work; private ones do not. Export them instead, and re-check `parse` in `lib/data/spotify/spotify_public.dart` against a fresh page |
+| Only 50 tracks arrived from a playlists link | `open.spotify.com/embed/...` carries one page of tracks, and that is the limit of the account-free route | Expected, and the UI says so. Use the Exportify CSV for the whole list |
+| The library or playlists never leave the error state | A file that cannot be parsed is an answer, not a hiccup, so it is not retried — `gandarProviderRetry` in `lib/state/retry_policy.dart` returns null for it | Fix the cause and use the button in the error state; transport failures retry themselves |
+| The log shows `Failed to open https://…googlevideo.com/…` for every track, and reading the URL shows the first megabyte is served while everything after it is `403` | The client that resolved the track handed out a URL googlevideo will not serve in full. Measured October 2026 with `tool/client_matrix.dart`: `android` and `ios` answer upstream, but on their URLs `bytes=0-1023` → 206 while `bytes=0-` and any range past ~1 MB → 403, because those URLs carry no PO token. No player can stream from that | Gandar asks only the `VISIONOS` client (`visionOsClient()` in [../lib/data/youtube/youtube_explode_resolver.dart](../lib/data/youtube/youtube_explode_resolver.dart)), whose URLs serve the whole file. If this returns, re-run `dart run tool/client_matrix.dart <videoId>` and switch the resolver to whichever client is serving full files |
+| Resolution fails with `RequestLimitExceededException`, or the log says YouTube is asking Gandar to prove it is not a bot | The player request itself was rejected, and it will be rejected for every track in a row | Nothing to fix locally: a refusal is a refusal. Gandar pauses extraction for five minutes, says so in the log, and never reports a refused stream as a finished track. Waiting is the only fix |
+| A track fails with "No video for this track yielded a playable audio stream" | YouTube changed its player responses, or this video genuinely has no usable audio-only stream | Expected fragility. Try another video for the same song; report the video id. `dart run tool/client_matrix.dart <videoId>` prints what each client answered and what the CDN serves for each of its URLs |
+| The queue skips through tracks with no sound | Fixed behaviour, kept honest: mpv reports "completed" for a refused URL too. The engine now treats a completion with no decoded audio as an error, so playback stops with a message instead of advancing | If it still happens, the log has `playback ended at 0 ms of 0 ms` for the track to report |
 | `flutter build apk` succeeds but there is no sound | `media_kit_libs_android_audio` is not a dependency yet | `flutter pub add media_kit_libs_android_audio` (Phase 2) |
 | Analyzer reports `strict_raw_types` / `strict_casts` errors | Expected — the project enables strict analysis on purpose | Fix the type; do not suppress it |
 

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../core/logging/app_logger.dart';
 import '../core/settings/playback_settings.dart';
 import '../domain/models/track.dart';
 import '../domain/repositories/repositories.dart';
@@ -33,6 +34,22 @@ class PlaybackController extends ChangeNotifier {
     _durationSub = engine.durationStream.listen((d) {
       if (d != null) durationNotifier.value = d;
     });
+    // The engine can fail on its own, after play() has already returned: a
+    // stream the server refuses never reaches the catch blocks in
+    // [_playCurrent]. Those failures have to reach the user too, or the only
+    // sign of them is a playlist that never makes a sound.
+    _errorSub = engine.errorStream.listen((error) {
+      _errorMessage = _describeEngineError(error);
+      AppLogger.instance.warn('playback', _errorMessage!);
+      notifyListeners();
+    });
+  }
+
+  /// A sentence for the player, from whatever libmpv said.
+  static String _describeEngineError(Object error) {
+    final text = error.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+    const limit = 300;
+    return text.length <= limit ? text : '${text.substring(0, limit)}…';
   }
 
   /// The audio backend (media_kit in production, a fake in tests).
@@ -49,6 +66,7 @@ class PlaybackController extends ChangeNotifier {
   late final StreamSubscription<EngineState> _stateSub;
   late final StreamSubscription<Duration> _positionSub;
   late final StreamSubscription<Duration?> _durationSub;
+  late final StreamSubscription<Object> _errorSub;
 
   /// High-frequency playback position, separate from [notifyListeners] so the
   /// seek bar can rebuild without rebuilding the whole app chrome.
@@ -161,34 +179,90 @@ class PlaybackController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// How long the engine gets to accept a stream before playback is declared
+  /// broken.
+  ///
+  /// Without a bound, a wedged native player is indistinguishable from a slow
+  /// one: the user presses play, nothing happens, and nothing is reported. It
+  /// is how a real bug in `media_kit`'s debug-mode handle file presented itself
+  /// — `_playCurrent` never returned, so the error path never ran.
+  static const Duration engineLoadTimeout = Duration(seconds: 20);
+
   Future<void> _playCurrent() async {
     final track = currentTrack;
     if (track == null) return;
     _errorMessage = null;
+    notifyListeners();
 
+    final stopwatch = Stopwatch()..start();
     try {
       final stream = await preloader.resolve(track);
-      await engine.load(stream.url, headers: stream.headers);
+      AppLogger.instance.info(
+        'playback',
+        'resolved "${track.title}" in ${stopwatch.elapsedMilliseconds} ms '
+            '(prefetch hit: ${preloader.peek(track.id) != null})',
+      );
+
+      await engine
+          .load(stream.url, headers: stream.headers)
+          .timeout(engineLoadTimeout);
       await engine.applyFilters(_settings);
       await engine.setVolume(_volume);
       await engine.play();
 
       _recent.record(track.id);
       await library.recordPlay(track.id, DateTime.now());
+      // "started", not "playing": this line records that the engine accepted
+      // the stream, which is not the same as sound coming out. The engine logs
+      // `first audio at N ms` when the position really moves, and a refusal is
+      // reported as an error rather than a completed track.
+      AppLogger.instance.info(
+        'playback',
+        'started "${track.title}" (${stopwatch.elapsedMilliseconds} ms to '
+            'hand-off)',
+      );
 
       // Warm the next track so it starts without a gap.
       if (_settings.prefetchNextTrack) {
         preloader.prefetch(_queue.next);
       }
-    } catch (e) {
+    } on TimeoutException {
+      _errorMessage =
+          'The audio engine stopped responding while loading '
+          '"${track.title}". Restart Gandar; if it keeps happening, send the '
+          'log from Settings.';
+      _engineState = EngineState.error;
+      AppLogger.instance.error(
+        'playback',
+        'engine did not accept "${track.title}" within '
+            '${engineLoadTimeout.inSeconds}s (${progressSummary()})',
+      );
+    } catch (e, stack) {
       _errorMessage = 'Could not play "${track.title}": $e';
       _engineState = EngineState.error;
+      AppLogger.instance.error(
+        'playback',
+        'could not play "${track.title}"',
+        error: e,
+        stackTrace: stack,
+      );
     }
     notifyListeners();
   }
 
+  /// A few facts about the engine, for a failure log that can be acted on.
+  String progressSummary() {
+    final track = currentTrack;
+    return 'state=${_engineState.name}, track=${track?.id ?? '-'}, '
+        'queue=${_queue.order.length}';
+  }
+
   void _onEngineState(EngineState state) {
     _engineState = state;
+    AppLogger.instance.debug(
+      'playback',
+      'engine -> ${state.name} (${progressSummary()})',
+    );
     if (state == EngineState.completed) {
       // Auto-advance; automix uses a crossfade, otherwise a plain handoff.
       _isCrossfading =
@@ -213,6 +287,7 @@ class PlaybackController extends ChangeNotifier {
     _stateSub.cancel();
     _positionSub.cancel();
     _durationSub.cancel();
+    _errorSub.cancel();
     positionNotifier.dispose();
     durationNotifier.dispose();
     engine.dispose();

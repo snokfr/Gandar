@@ -1,5 +1,5 @@
 name: gandar
-description: "Gandar - a cross-platform audio player that syncs your Spotify library and streams ad-free audio."
+description: "Gandar - a cross-platform audio player that imports your Spotify library and streams ad-free audio."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -42,19 +42,22 @@ dependencies:
   dio: ^5.11.1
   yaml: ^3.1.4
   crypto: ^3.0.7
-  url_launcher: ^6.3.3
   file_picker: ^13.1.0
   media_kit: ^1.2.6
   media_kit_libs_windows_audio: ^1.0.9
   youtube_explode_dart: ^3.1.0
   drift: ^2.35.2
   sqlite3_flutter_libs: ^0.6.0+eol
-  flutter_secure_storage: ^11.2.0
   collection: ^1.19.1
+  window_manager: ^0.5.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+
+  # Used by tests that script YouTube's HTTP responses (a rate-limit refusal);
+  # `youtube_explode_dart` already brings it in, this just makes it direct.
+  http: ^1.6.0
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

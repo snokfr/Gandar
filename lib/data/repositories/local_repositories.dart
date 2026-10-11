@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../domain/models/cache_entry.dart';
+import '../../domain/models/play_record.dart';
 import '../../domain/models/playlist.dart';
 import '../../domain/models/track.dart';
 import '../../domain/repositories/repositories.dart';
@@ -144,11 +145,19 @@ class DriftLibraryRepository implements LibraryRepository {
     });
   }
 
+  /// The local library, most recently liked first.
+  ///
+  /// Ordering by `addedAt` (not by when the row was written) is what makes the
+  /// order stable and identical to Spotify's: every row in one sync batch
+  /// shares a `cachedAt`, so ordering by that was effectively random.
   @override
   Future<List<Track>> cachedLikedTracks() async {
-    final rows = await (_db.select(
-      _db.tracks,
-    )..orderBy([(t) => OrderingTerm.desc(t.cachedAt)])).get();
+    final rows =
+        await (_db.select(_db.tracks)..orderBy([
+              (t) => OrderingTerm.desc(t.addedAt),
+              (t) => OrderingTerm.asc(t.id),
+            ]))
+            .get();
     return rows.map(_rowToTrack).toList(growable: false);
   }
 
@@ -195,6 +204,109 @@ class DriftLibraryRepository implements LibraryRepository {
           ),
         )
         .toList(growable: false);
+  }
+
+  @override
+  Future<void> replacePlaylistTracks(
+    String playlistId,
+    List<Track> tracks,
+  ) async {
+    final now = DateTime.now();
+    await _db.transaction(() async {
+      // The tracks themselves first: the join rows point at them.
+      await upsertTracks(tracks);
+      await (_db.delete(
+        _db.playlistTracks,
+      )..where((t) => t.playlistId.equals(playlistId))).go();
+      if (tracks.isEmpty) return;
+      await _db.batch((b) {
+        b.insertAll(_db.playlistTracks, [
+          for (var i = 0; i < tracks.length; i++)
+            PlaylistTracksCompanion.insert(
+              playlistId: playlistId,
+              trackId: tracks[i].id,
+              position: i,
+              cachedAt: now,
+            ),
+        ]);
+      });
+      await (_db.update(
+        _db.playlists,
+      )..where((t) => t.id.equals(playlistId))).write(
+        PlaylistsCompanion(
+          trackCount: Value(tracks.length),
+          cachedAt: Value(now),
+        ),
+      );
+    });
+  }
+
+  @override
+  Future<List<Track>> cachedPlaylistTracks(String playlistId) async {
+    final query = _db.select(_db.playlistTracks).join([
+      innerJoin(
+        _db.tracks,
+        _db.tracks.id.equalsExp(_db.playlistTracks.trackId),
+      ),
+    ])..where(_db.playlistTracks.playlistId.equals(playlistId));
+    query.orderBy([OrderingTerm.asc(_db.playlistTracks.position)]);
+
+    final rows = await query.get();
+    return rows
+        .map((row) => _rowToTrack(row.readTable(_db.tracks)))
+        .toList(growable: false);
+  }
+
+  @override
+  Future<List<Track>> tracksMissingArtwork({int limit = 500}) async {
+    final rows =
+        await (_db.select(_db.tracks)
+              ..where((t) => t.artworkUrl.isNull() | t.artworkUrl.equals(''))
+              ..orderBy([(t) => OrderingTerm.desc(t.addedAt)])
+              ..limit(limit))
+            .get();
+    return rows.map(_rowToTrack).toList(growable: false);
+  }
+
+  /// Play history joined with cached durations, oldest first.
+  ///
+  /// A left join means a play of a track that is no longer cached still counts;
+  /// its duration is reported as 0 and the savings view says so.
+  @override
+  Future<List<PlayRecord>> playHistory() async {
+    final query = _db.select(_db.playHistory).join([
+      leftOuterJoin(
+        _db.tracks,
+        _db.tracks.id.equalsExp(_db.playHistory.trackId),
+      ),
+    ])..orderBy([OrderingTerm.asc(_db.playHistory.playedAt)]);
+
+    final rows = await query.get();
+    return rows
+        .map(
+          (row) => PlayRecord(
+            trackId: row.read(_db.playHistory.trackId) ?? '',
+            playedAt: row.read(_db.playHistory.playedAt) ?? DateTime.now(),
+            durationMs: row.read(_db.tracks.durationMs) ?? 0,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  /// Removes a track and its playlist memberships.
+  ///
+  /// Play history is deliberately left alone: the savings view counts what was
+  /// played, and deleting a track should not rewrite that past. A history row
+  /// whose track is gone reports a zero duration, which the stats already
+  /// handle.
+  @override
+  Future<void> removeTrack(String trackId) async {
+    await _db.transaction(() async {
+      await (_db.delete(
+        _db.playlistTracks,
+      )..where((t) => t.trackId.equals(trackId))).go();
+      await (_db.delete(_db.tracks)..where((t) => t.id.equals(trackId))).go();
+    });
   }
 
   @override

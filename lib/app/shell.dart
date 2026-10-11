@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../core/motion/motion.dart';
 import '../core/theme/theme_engine.dart';
+import '../core/window/window_actions.dart';
 import '../features/player/player_surface.dart';
 import '../widgets/common.dart';
+import '../widgets/mac_window_controls.dart';
 
 /// Navigation destinations shown in both layouts.
 class _Destination {
@@ -24,6 +26,7 @@ const List<_Destination> _destinations = <_Destination>[
     Icons.library_music_outlined,
     Icons.library_music,
   ),
+  _Destination('/albums', 'Albums', Icons.album_outlined, Icons.album),
   _Destination(
     '/playlists',
     'Playlists',
@@ -31,6 +34,7 @@ const List<_Destination> _destinations = <_Destination>[
     Icons.queue_music,
   ),
   _Destination('/search', 'Search', Icons.search_outlined, Icons.search),
+  _Destination('/import', 'Import', Icons.download_outlined, Icons.download),
   _Destination('/themes', 'Themes', Icons.palette_outlined, Icons.palette),
   _Destination(
     '/settings',
@@ -43,18 +47,37 @@ const List<_Destination> _destinations = <_Destination>[
 /// Width at or above which the desktop layout is used.
 const double kDesktopBreakpoint = 900;
 
-/// Adapts between a desktop layout (side rail + rich playback bar) and a
-/// mobile layout (bottom navigation + mini player).
-class AppShell extends ConsumerWidget {
+/// Adapts between a desktop layout (sidebar + window controls + rich playback
+/// bar) and a mobile layout (bottom navigation + mini player).
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key, required this.child});
 
   final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends ConsumerState<AppShell> {
+  bool _maximized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshMaximized();
+  }
+
+  Future<void> _refreshMaximized() async {
+    final maximized = await WindowActions.instance.isMaximized();
+    if (mounted && maximized != _maximized) {
+      setState(() => _maximized = maximized);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final location = GoRouterState.of(context).uri.path;
     final index = _indexFor(location);
-    final tokens = context.gandarTokens;
     final duration = Motion.adaptiveDuration(context);
 
     return LayoutBuilder(
@@ -65,51 +88,46 @@ class AppShell extends ConsumerWidget {
           return Scaffold(
             body: Row(
               children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: tokens.backgroundSecondaryColor,
-                    border: Border(
-                      right: BorderSide(color: tokens.borderColor),
-                    ),
-                  ),
-                  child: NavigationRail(
-                    extended: constraints.maxWidth >= 1180,
-                    selectedIndex: index,
-                    onDestinationSelected: (i) =>
-                        context.go(_destinations[i].path),
-                    labelType: constraints.maxWidth >= 1180
-                        ? NavigationRailLabelType.none
-                        : NavigationRailLabelType.all,
-                    leading: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 12),
-                        child: GandarLogo(size: 26),
-                      ),
-                    ),
-                    destinations: [
-                      for (final d in _destinations)
-                        NavigationRailDestination(
-                          icon: Icon(d.icon),
-                          selectedIcon: Icon(d.selectedIcon),
-                          label: Text(d.label),
-                        ),
-                    ],
-                  ),
+                _Sidebar(
+                  index: index,
+                  extended: constraints.maxWidth >= 1180,
+                  maximized: _maximized,
+                  onZoomChanged: _refreshMaximized,
+                  onSelected: (i) => context.go(_destinations[i].path),
                 ),
                 Expanded(
-                  child: Column(
+                  child: Stack(
                     children: [
-                      Expanded(
-                        child: AnimatedSwitcher(
-                          duration: duration,
-                          child: KeyedSubtree(
-                            key: ValueKey(location),
-                            child: child,
+                      Column(
+                        children: [
+                          Expanded(
+                            child: AnimatedSwitcher(
+                              duration: duration,
+                              child: KeyedSubtree(
+                                key: ValueKey(location),
+                                child: widget.child,
+                              ),
+                            ),
                           ),
+                          const PlayerBar(),
+                        ],
+                      ),
+                      // The content can be grabbed by its top edge too, the way
+                      // the empty part of a Mac toolbar can. Translucent, so a
+                      // control that lives up here still gets its taps.
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: MacDragRegion(
+                          height: 26,
+                          onDrag: () => WindowActions.instance.startDragging(),
+                          onZoom: () async {
+                            await WindowActions.instance.toggleZoom();
+                            await _refreshMaximized();
+                          },
                         ),
                       ),
-                      const PlayerBar(),
                     ],
                   ),
                 ),
@@ -121,7 +139,7 @@ class AppShell extends ConsumerWidget {
         return Scaffold(
           body: Column(
             children: [
-              Expanded(child: child),
+              Expanded(child: widget.child),
               const MiniPlayer(),
             ],
           ),
@@ -147,5 +165,86 @@ class AppShell extends ConsumerWidget {
       if (location.startsWith(_destinations[i].path)) return i;
     }
     return 0;
+  }
+}
+
+/// The sidebar: window controls where a Mac puts them, then the logo, then the
+/// destinations.
+class _Sidebar extends StatelessWidget {
+  const _Sidebar({
+    required this.index,
+    required this.extended,
+    required this.onSelected,
+    required this.maximized,
+    required this.onZoomChanged,
+  });
+
+  final int index;
+  final bool extended;
+  final ValueChanged<int> onSelected;
+  final bool maximized;
+  final VoidCallback onZoomChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.gandarTokens;
+
+    Future<void> zoom() async {
+      await WindowActions.instance.toggleZoom();
+      onZoomChanged();
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: tokens.backgroundSecondaryColor,
+        border: Border(right: BorderSide(color: tokens.borderColor)),
+      ),
+      child: NavigationRail(
+        extended: extended,
+        selectedIndex: index,
+        onDestinationSelected: onSelected,
+        labelType: extended
+            ? NavigationRailLabelType.none
+            : NavigationRailLabelType.all,
+        // `start`, because a centred leading puts the window buttons in the
+        // middle of the sidebar, where the platform's own hit-testing treats
+        // them as title bar and swallows the clicks before Flutter sees them.
+        // They belong in the corner anyway — that is where a Mac puts them, and
+        // where `WM_NCHITTEST` in the runner leaves them clickable.
+        leading: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // The top of the sidebar is part of the window's title bar, so it
+            // is what the window is dragged by — except the lights themselves.
+            MacDragRegion(
+              height: 44,
+              onDrag: () => WindowActions.instance.startDragging(),
+              onZoom: zoom,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 18, top: 16),
+                child: MacWindowControls(
+                  zoomIsMaximized: maximized,
+                  onClose: () => WindowActions.instance.close(),
+                  onMinimize: () => WindowActions.instance.minimize(),
+                  onZoom: zoom,
+                ),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(18, 4, 12, 12),
+              child: GandarLogo(size: 26),
+            ),
+          ],
+        ),
+        destinations: [
+          for (final d in _destinations)
+            NavigationRailDestination(
+              icon: Icon(d.icon),
+              selectedIcon: Icon(d.selectedIcon),
+              label: Text(d.label),
+            ),
+        ],
+      ),
+    );
   }
 }

@@ -1,13 +1,24 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../data/youtube/youtube_search.dart';
+import '../../domain/models/playlist.dart';
+import '../../domain/models/track.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
+import '../player/player_surface.dart' show formatDuration;
 
-/// Searches the user's library and playlists.
+/// Searches two sources at once:
 ///
-/// Track metadata comes from Spotify; the YouTube lookup happens later, at
-/// play time, and is invisible to this screen.
+/// * **your library** — already on disk, so it answers instantly and works
+///   offline,
+/// * **YouTube** — playable even when a track has nothing to do with it.
+///
+/// A track that comes from YouTube carries its video id, so tapping it plays
+/// that exact video through the normal queue.
 class SearchPage extends ConsumerStatefulWidget {
   const SearchPage({super.key});
 
@@ -17,20 +28,46 @@ class SearchPage extends ConsumerStatefulWidget {
 
 class _SearchPageState extends ConsumerState<SearchPage> {
   final _controller = TextEditingController();
+  Timer? _debounce;
   String _query = '';
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _controller.dispose();
     super.dispose();
   }
 
+  /// Waits for a pause in typing before querying the network.
+  void _onChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) setState(() => _query = value.trim());
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final query = _query.trim().toLowerCase();
+    final query = _query;
+    final searching = query.length >= kMinSearchLength;
+
     final liked = ref.watch(likedTracksProvider).asData?.value ?? const [];
     final playlists = ref.watch(playlistsProvider).asData?.value ?? const [];
     final player = ref.watch(playbackControllerProvider);
+
+    // Library matches need no network: filter what is already loaded.
+    final libraryTracks = searching
+        ? liked.where((t) => _matchesTrack(t, query)).toList(growable: false)
+        : const <Track>[];
+    final libraryPlaylists = searching
+        ? playlists
+              .where((p) => _matches(query, p.name))
+              .toList(growable: false)
+        : const <Playlist>[];
+
+    final youTube = searching
+        ? ref.watch(youTubeSearchProvider(query))
+        : const AsyncValue<List<YouTubeVideo>>.data(<YouTubeVideo>[]);
 
     return Scaffold(
       body: Column(
@@ -40,58 +77,77 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             child: TextField(
               controller: _controller,
               autofocus: true,
-              onChanged: (v) => setState(() => _query = v),
+              onChanged: _onChanged,
               decoration: InputDecoration(
-                hintText: 'Search songs, artists and playlists',
+                hintText: 'Search your library and YouTube',
                 prefixIcon: const Icon(Icons.search),
-                suffixIcon: _query.isEmpty
+                suffixIcon: _controller.text.isEmpty
                     ? null
                     : IconButton(
                         icon: const Icon(Icons.clear),
                         onPressed: () {
                           _controller.clear();
-                          setState(() => _query = '');
+                          _onChanged('');
                         },
                       ),
               ),
             ),
           ),
           Expanded(
-            child: query.isEmpty
+            child: !searching
                 ? const EmptyState(
                     icon: Icons.search,
-                    title: 'Search your library',
+                    title: 'Search everything',
                     message:
-                        'Find liked songs and playlists by title or artist.',
+                        'Finds anything you have imported and any video on '
+                        'YouTube. Library results are instant and work offline; '
+                        'the YouTube search needs a connection.',
                   )
                 : ListView(
                     children: [
-                      for (final p in playlists.where(
-                        (p) => p.name.toLowerCase().contains(query),
-                      ))
-                        ListTile(
-                          leading: AlbumArt(url: p.artworkUrl, size: 44),
-                          title: Text(p.name),
-                          subtitle: Text('${p.trackCount} tracks'),
+                      _Section(
+                        title: 'In your library',
+                        subtitle:
+                            '${libraryTracks.length} songs · '
+                            '${libraryPlaylists.length} playlists',
+                        child: _trackList(
+                          context,
+                          libraryTracks,
+                          onPlay: (track) => player.playTracks(
+                            libraryTracks,
+                            startTrackId: track.id,
+                          ),
+                          empty: 'Nothing in your saved songs matches.',
                         ),
-                      for (final t in liked.where(
-                        (t) =>
-                            t.title.toLowerCase().contains(query) ||
-                            t.artists.any(
-                              (a) => a.toLowerCase().contains(query),
-                            ),
-                      ))
-                        TrackTile(
-                          track: t,
-                          onTap: () =>
-                              player.playTracks(liked, startTrackId: t.id),
+                      ),
+                      _Section(
+                        title: 'Playlists you have',
+                        subtitle: '${libraryPlaylists.length}',
+                        show: libraryPlaylists.isNotEmpty,
+                        child: _playlistList(libraryPlaylists),
+                      ),
+                      _Section(
+                        title: 'On YouTube',
+                        subtitle: youTube.asData == null
+                            ? 'searching…'
+                            : '${youTube.asData!.value.length} videos',
+                        child: _asyncList(
+                          youTube,
+                          (videos) => Column(
+                            children: [
+                              for (final video in videos)
+                                _VideoRow(
+                                  video: video,
+                                  onPlay: () =>
+                                      player.playTracks([video.toTrack()]),
+                                ),
+                              if (videos.isEmpty)
+                                const _Hint('No YouTube matches.'),
+                            ],
+                          ),
                         ),
-                      if (playlists.isEmpty && liked.isEmpty)
-                        const EmptyState(
-                          icon: Icons.search_off,
-                          title: 'No matches',
-                          message: 'Nothing in your library matches that.',
-                        ),
+                      ),
+                      const SizedBox(height: 24),
                     ],
                   ),
           ),
@@ -99,4 +155,151 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       ),
     );
   }
+
+  static bool _matches(String query, String value) =>
+      value.toLowerCase().contains(query.toLowerCase());
+
+  static bool _matchesTrack(Track track, String query) =>
+      _matches(query, track.title) ||
+      track.artists.any((a) => _matches(query, a)) ||
+      _matches(query, track.album ?? '');
+
+  Widget _trackList(
+    BuildContext context,
+    List<Track> tracks, {
+    required void Function(Track) onPlay,
+    required String empty,
+    String? subtitleLabel,
+  }) {
+    if (tracks.isEmpty) return _Hint(empty);
+    return Column(
+      children: [
+        for (final track in tracks)
+          TrackTile(
+            track: track,
+            subtitle: subtitleLabel == null
+                ? null
+                : '$subtitleLabel · ${track.artists.join(', ')}',
+            onTap: () => onPlay(track),
+          ),
+      ],
+    );
+  }
+
+  Widget _playlistList(List<Playlist> playlists) {
+    if (playlists.isEmpty) return const _Hint('No playlists match.');
+    return Column(
+      children: [
+        for (final playlist in playlists)
+          ListTile(
+            leading: AlbumArt(url: playlist.artworkUrl, size: 44),
+            title: Text(playlist.name),
+            subtitle: Text(
+              '${playlist.trackCount} tracks'
+              '${playlist.ownerName == null ? '' : ' · ${playlist.ownerName}'}',
+            ),
+            onTap: () => context.go('/playlists/${playlist.id}'),
+          ),
+      ],
+    );
+  }
+
+  /// Renders an async section: spinner while loading, message on error, and
+  /// the builder's content once loaded.
+  Widget _asyncList<T>(AsyncValue<T> value, Widget Function(T data) builder) {
+    return value.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: LinearProgressIndicator(minHeight: 2),
+      ),
+      error: (error, _) => _Hint('Could not search: $error'),
+      data: builder,
+    );
+  }
+}
+
+/// One labelled block of results.
+class _Section extends StatelessWidget {
+  const _Section({
+    required this.title,
+    required this.child,
+    this.subtitle,
+    this.show = true,
+  });
+
+  final String title;
+  final String? subtitle;
+  final Widget child;
+  final bool show;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!show) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SectionHeader(title: title, subtitle: subtitle),
+          const SizedBox(height: 4),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _Hint extends StatelessWidget {
+  const _Hint(this.message);
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+    child: Text(message, style: Theme.of(context).textTheme.bodySmall),
+  );
+}
+
+/// A YouTube result, with a play action instead of a queue position.
+class _VideoRow extends StatelessWidget {
+  const _VideoRow({required this.video, required this.onPlay});
+
+  final YouTubeVideo video;
+  final VoidCallback onPlay;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListTile(
+      onTap: onPlay,
+      leading: AlbumArt(url: video.thumbnailUrl, size: 44),
+      title: Text(
+        video.title,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.bodyMedium,
+      ),
+      subtitle: Text(
+        [
+          if (video.author != null) video.author!,
+          if (video.duration != null) formatDuration(video.duration!),
+        ].join(' · '),
+        style: theme.textTheme.bodySmall,
+      ),
+      trailing: const Icon(Icons.play_arrow),
+    );
+  }
+}
+
+/// Adapts a YouTube result into the app's track model so playback, history and
+/// crossfade all work unchanged.
+extension on YouTubeVideo {
+  Track toTrack() => Track(
+    id: trackId,
+    title: title,
+    artists: [if (author != null && author!.isNotEmpty) author! else 'YouTube'],
+    durationMs: duration?.inMilliseconds ?? 0,
+    artworkUrl: thumbnailUrl,
+  );
 }

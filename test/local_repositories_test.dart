@@ -149,6 +149,53 @@ void main() {
       },
     );
 
+    test('playHistory joins cached durations, oldest first', () async {
+      final repo = DriftLibraryRepository(db);
+      await repo.upsertTracks([
+        const Track(id: 't1', title: 'One', artists: ['A'], durationMs: 200000),
+        const Track(id: 't2', title: 'Two', artists: ['B'], durationMs: 0),
+      ]);
+      await repo.recordPlay('t2', DateTime(2026, 1, 3));
+      await repo.recordPlay('t1', DateTime(2026, 1, 1));
+      // A play of a track that is not cached still counts.
+      await repo.recordPlay('gone', DateTime(2026, 1, 2));
+
+      final history = await repo.playHistory();
+
+      expect(history.map((r) => r.trackId).toList(), ['t1', 'gone', 't2']);
+      expect(history.first.durationMs, 200000);
+      expect(history[1].durationMs, 0, reason: 'unknown duration');
+    });
+
+    test('cached tracks come back most recently liked first', () async {
+      final repo = DriftLibraryRepository(db);
+      // All three rows are written in one batch, so they share a cachedAt:
+      // ordering can only come from addedAt.
+      await repo.upsertTracks([
+        Track(
+          id: 'old',
+          title: 'Oldest',
+          artists: const ['A'],
+          addedAt: DateTime(2026, 1, 1),
+        ),
+        Track(
+          id: 'new',
+          title: 'Newest',
+          artists: const ['A'],
+          addedAt: DateTime(2026, 3, 1),
+        ),
+        Track(
+          id: 'mid',
+          title: 'Middle',
+          artists: const ['A'],
+          addedAt: DateTime(2026, 2, 1),
+        ),
+      ]);
+
+      final cached = await repo.cachedLikedTracks();
+      expect(cached.map((t) => t.id).toList(), ['new', 'mid', 'old']);
+    });
+
     test('recentTrackIds respects the limit', () async {
       final repo = DriftLibraryRepository(db);
       for (var i = 0; i < 5; i++) {

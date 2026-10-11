@@ -1,5 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../core/logging/app_logger.dart';
 
 import '../../core/settings/eq_presets.dart';
 import '../../core/settings/playback_settings.dart';
@@ -8,6 +14,7 @@ import '../../domain/models/cache_entry.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
 import '../player/player_surface.dart';
+import 'savings_card.dart';
 
 /// Settings modeled on Spotify's playback menu plus Gandar's extra controls.
 class SettingsPage extends ConsumerWidget {
@@ -23,6 +30,22 @@ class SettingsPage extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          const SectionHeader(
+            title: 'Music',
+            subtitle: 'Where your songs and playlists come from',
+          ),
+          const SizedBox(height: 16),
+          const _MusicSourceCard(),
+          const SizedBox(height: 28),
+
+          const SectionHeader(
+            title: 'Savings',
+            subtitle: 'What this app has saved you so far',
+          ),
+          const SizedBox(height: 16),
+          const SavingsCard(),
+          const SizedBox(height: 28),
+
           const SectionHeader(
             title: 'Playback',
             subtitle: 'Audio processing and transition behaviour',
@@ -333,6 +356,11 @@ class SettingsPage extends ConsumerWidget {
               ],
             ),
           ),
+          const SizedBox(height: 12),
+
+          // ---- Logs and maintenance -------------------------------------
+          const LogsCard(),
+          const SizedBox(height: 24),
         ],
       ),
     );
@@ -354,6 +382,218 @@ class SettingsPage extends ConsumerWidget {
     if (s.monoAudio) parts.add('Mono');
     if (s.gaplessPlayback) parts.add('Gapless');
     return parts.isEmpty ? 'None' : parts.join(' · ');
+  }
+}
+
+/// Log verbosity, where the log file lives, and a way to read it in-app.
+class LogsCard extends ConsumerWidget {
+  const LogsCard({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final logger = AppLogger.instance;
+    final level = ref.watch(logLevelProvider);
+    final theme = Theme.of(context);
+
+    return GandarCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Logs and data', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 2),
+          Text(
+            logger.fileLoggingFailed
+                ? 'File logging is unavailable on this machine; recent lines '
+                      'are kept in memory only.'
+                : 'Every startup, request, playback and error is written to a '
+                      'daily file in the logs folder.',
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<LogLevel>(
+            initialValue: level,
+            decoration: const InputDecoration(labelText: 'Log level'),
+            items: [
+              for (final value in LogLevel.values)
+                DropdownMenuItem(
+                  value: value,
+                  child: Text(
+                    value.name[0].toUpperCase() + value.name.substring(1),
+                  ),
+                ),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              ref.read(logLevelProvider.notifier).set(value);
+            },
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => _openLogsFolder(context, logger),
+                icon: const Icon(Icons.folder_open_outlined),
+                label: const Text('Open logs folder'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _showRecentLog(context, logger),
+                icon: const Icon(Icons.receipt_long_outlined),
+                label: const Text('Recent log'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () {
+                  ref.invalidate(likedTracksProvider);
+                  ref.invalidate(cachedLikedTracksProvider);
+                  ref.invalidate(playlistsProvider);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Reloaded the library.')),
+                  );
+                },
+                icon: const Icon(Icons.sync),
+                label: const Text('Reload library'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Opens the log directory in the platform file manager.
+  static Future<void> _openLogsFolder(
+    BuildContext context,
+    AppLogger logger,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final dir = logger.directory;
+    if (dir == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Logging has not started yet.')),
+      );
+      return;
+    }
+    try {
+      if (Platform.isWindows) {
+        await Process.start('explorer', [dir.path]);
+      } else if (Platform.isMacOS) {
+        await Process.start('open', [dir.path]);
+      } else {
+        await Process.start('xdg-open', [dir.path]);
+      }
+    } catch (e) {
+      logger.warn('logger', 'could not open the logs folder', error: e);
+      messenger.showSnackBar(
+        SnackBar(content: Text('Logs are in ${dir.path}')),
+      );
+    }
+  }
+
+  /// Shows the tail of the log in a dialog, plus the path to copy.
+  static Future<void> _showRecentLog(
+    BuildContext context,
+    AppLogger logger,
+  ) async {
+    final lines = logger.recent(120).map((e) => e.line).join('\n');
+    final path = logger.file?.path ?? '(memory only)';
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Recent log'),
+        content: SizedBox(
+          width: 720,
+          height: 420,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SelectableText(
+                path,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: context.gandarTokens.borderColor),
+                    borderRadius: BorderRadius.circular(
+                      context.gandarTokens.radiusSm,
+                    ),
+                  ),
+                  child: SingleChildScrollView(
+                    reverse: true,
+                    child: SelectableText(
+                      lines.isEmpty ? 'Nothing logged yet.' : lines,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Clipboard.setData(ClipboardData(text: path)),
+            child: const Text('Copy path'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Says plainly where the music comes from, now that there is no account.
+///
+/// This occupies the place a sign-in card used to, so nobody goes looking for
+/// a Spotify account the app deliberately does not have.
+class _MusicSourceCard extends StatelessWidget {
+  const _MusicSourceCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.gandarTokens;
+    return GandarCard(
+      child: Row(
+        children: [
+          Icon(Icons.library_music_outlined, color: tokens.accentColor),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Public links and exported files',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Gandar has no Spotify account to sign into. It reads public '
+                  'playlist pages, and the library files you export yourself, '
+                  'then keeps everything on this machine.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          FilledButton.icon(
+            onPressed: () => context.go('/import'),
+            icon: const Icon(Icons.download_outlined),
+            label: const Text('Import music'),
+          ),
+        ],
+      ),
+    );
   }
 }
 

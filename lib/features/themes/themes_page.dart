@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../core/storage/app_directory.dart';
 import '../../core/theme/theme_codec.dart';
 import '../../core/theme/theme_tokens.dart';
 import '../../state/providers.dart';
@@ -80,6 +81,19 @@ class _ThemesPageState extends ConsumerState<ThemesPage> {
     );
   }
 
+  /// Where an exported theme goes when the native save dialog is unavailable.
+  ///
+  /// Documents first, because that is where a person would look for it. If even
+  /// that lookup fails — it is the same platform channel that fails for the
+  /// library and imports — the app's own data directory still works.
+  Future<Directory> _exportDirectory() async {
+    try {
+      return await getApplicationDocumentsDirectory();
+    } catch (_) {
+      return AppDirectory.support();
+    }
+  }
+
   Future<void> _importTheme() async {
     try {
       final files = await FilePicker.pickFiles(
@@ -109,7 +123,7 @@ class _ThemesPageState extends ConsumerState<ThemesPage> {
       if (saved == null) {
         // User cancelled; also offer a copy in the documents directory so the
         // theme is never lost if the native dialog is unavailable.
-        final dir = await getApplicationDocumentsDirectory();
+        final dir = await _exportDirectory();
         final path = '${dir.path}/${tokens.id}.gandar-theme.json';
         await File(path).writeAsBytes(bytes);
         if (mounted) setState(() => _status = 'Exported to $path');

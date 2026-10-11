@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/errors/failure_text.dart';
 import '../core/theme/theme_engine.dart';
 import '../domain/models/track.dart';
 
@@ -45,17 +46,29 @@ class SectionHeader extends StatelessWidget {
 
 /// Square album artwork with a graceful placeholder.
 class AlbumArt extends StatelessWidget {
-  const AlbumArt({super.key, this.url, this.size = 56, this.radius});
+  const AlbumArt({
+    super.key,
+    this.url,
+    this.size = 56,
+    this.radius,
+    this.isCurrent = false,
+  });
 
   final String? url;
   final double size;
   final double? radius;
 
+  /// Marks this as the track being played.
+  ///
+  /// A shelf of covers has no title to colour, so the badge is how the cover
+  /// says "this one" — the same convention every music player uses.
+  final bool isCurrent;
+
   @override
   Widget build(BuildContext context) {
     final tokens = context.gandarTokens;
     final r = BorderRadius.circular(radius ?? tokens.radiusSm);
-    return ClipRRect(
+    final art = ClipRRect(
       borderRadius: r,
       child: SizedBox(
         width: size,
@@ -65,7 +78,7 @@ class AlbumArt extends StatelessWidget {
           child: url == null || url!.isEmpty
               ? Icon(
                   Icons.music_note,
-                  size: size * 0.4,
+                  size: size.isFinite ? size * 0.4 : 24,
                   color: tokens.textSecondaryColor,
                 )
               : Image.network(
@@ -73,12 +86,39 @@ class AlbumArt extends StatelessWidget {
                   fit: BoxFit.cover,
                   errorBuilder: (_, _, _) => Icon(
                     Icons.music_note,
-                    size: size * 0.4,
+                    size: size.isFinite ? size * 0.4 : 24,
                     color: tokens.textSecondaryColor,
                   ),
                 ),
         ),
       ),
+    );
+    if (!isCurrent) return art;
+
+    return Stack(
+      children: [
+        art,
+        Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: r,
+              border: Border.all(color: tokens.accentColor, width: 2),
+            ),
+          ),
+        ),
+        Positioned(
+          right: 6,
+          bottom: 6,
+          child: Container(
+            padding: const EdgeInsets.all(3),
+            decoration: const BoxDecoration(
+              color: Color(0xCC000000),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.play_arrow, size: 14, color: Colors.white),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -237,6 +277,10 @@ class SettingSliderTile extends StatelessWidget {
 }
 
 /// Centered empty/error placeholder.
+///
+/// Scrolls rather than overflows when the copy is long or the window is small,
+/// because the alternative is a yellow-and-black bar across the explanation the
+/// user needs to read.
 class EmptyState extends StatelessWidget {
   const EmptyState({
     super.key,
@@ -256,10 +300,10 @@ class EmptyState extends StatelessWidget {
     final theme = Theme.of(context);
     final tokens = context.gandarTokens;
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: 48, color: tokens.textSecondaryColor),
             const SizedBox(height: 16),
@@ -284,7 +328,59 @@ class EmptyState extends StatelessWidget {
   }
 }
 
-/// The Gandar wordmark used in the sidebar and sign-in screen.
+/// The action that belongs under a failure message.
+///
+/// **Retry** is offered only when repeating the work could change the answer.
+/// A file that will never parse gets a route to the screen that explains what
+/// to change instead, so the button never promises something the app cannot
+/// deliver.
+class FailureAction extends StatelessWidget {
+  const FailureAction({
+    super.key,
+    required this.failure,
+    required this.onRetry,
+    this.onFix,
+    this.fixLabel,
+  });
+
+  final FailureText failure;
+
+  /// Re-runs the work behind the failed view.
+  final VoidCallback onRetry;
+
+  /// Where to send the user when the fix is outside this screen. Omitted on
+  /// screens that can only ever retry.
+  final VoidCallback? onFix;
+
+  /// Label for [onFix]; defaults to wording that suits a dead end.
+  final String? fixLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    if (failure.retryable) {
+      return FilledButton.icon(
+        onPressed: onRetry,
+        icon: const Icon(Icons.refresh),
+        label: const Text('Retry'),
+      );
+    }
+    final fix = onFix;
+    if (fix == null) {
+      return OutlinedButton.icon(
+        onPressed: onRetry,
+        icon: const Icon(Icons.refresh),
+        label: const Text('Check again'),
+      );
+    }
+    return OutlinedButton.icon(
+      onPressed: fix,
+      icon: const Icon(Icons.help_outline),
+      label: Text(fixLabel ?? 'How to fix this'),
+    );
+  }
+}
+
+/// The Gandar wordmark used in the sidebar and on the empty states.
 class GandarLogo extends StatelessWidget {
   const GandarLogo({super.key, this.size = 28});
 

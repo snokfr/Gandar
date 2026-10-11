@@ -59,6 +59,7 @@ class SettingsRepository {
   static const String _playbackKey = 'settings.playback.v1';
   static const String _activeThemeKey = 'settings.theme.active.v1';
   static const String _customThemesKey = 'settings.theme.custom.v1';
+  static const String _logLevelKey = 'settings.log.level.v1';
 
   Future<PlaybackSettings> loadPlayback() async {
     final raw = await _store.getString(_playbackKey);
@@ -100,4 +101,10 @@ class SettingsRepository {
     _customThemesKey,
     jsonEncode(themes.map(ThemeCodec.toMap).toList()),
   );
+
+  /// Persisted log level name, or null to use the default for the build mode.
+  Future<String?> loadLogLevelName() => _store.getString(_logLevelKey);
+
+  Future<void> saveLogLevelName(String name) =>
+      _store.setString(_logLevelKey, name);
 }

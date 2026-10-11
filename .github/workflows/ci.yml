@@ -11,9 +11,6 @@ concurrency:
 
 env:
   FLUTTER_VERSION: stable
-  # The client id is injected at build time; a placeholder keeps CI honest
-  # without requiring a real Spotify application.
-  SPOTIFY_CLIENT_ID: ci-placeholder
 
 jobs:
   analyze-and-test:
@@ -60,7 +57,7 @@ jobs:
         run: dart run build_runner build
 
       - name: Build Windows release
-        run: flutter build windows --release --dart-define=SPOTIFY_CLIENT_ID=${{ env.SPOTIFY_CLIENT_ID }}
+        run: flutter build windows --release
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4

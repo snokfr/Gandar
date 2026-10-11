@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gandar/core/settings/playback_settings.dart';
+import 'package:gandar/domain/models/play_record.dart';
 import 'package:gandar/domain/models/playlist.dart';
 import 'package:gandar/domain/models/resolved_stream.dart';
 import 'package:gandar/domain/models/track.dart';
@@ -41,10 +42,16 @@ class FakeLibrary implements LibraryRepository {
       plays.add(trackId);
 
   @override
+  Future<List<PlayRecord>> playHistory() async => const [];
+
+  @override
   Future<List<String>> recentTrackIds({int limit = 50}) async => const [];
 
   @override
   Future<void> upsertTracks(List<Track> tracks) async {}
+
+  @override
+  Future<void> removeTrack(String trackId) async {}
 
   @override
   Future<List<Track>> cachedLikedTracks() async => const [];
@@ -54,6 +61,18 @@ class FakeLibrary implements LibraryRepository {
 
   @override
   Future<List<Playlist>> cachedPlaylists() async => const [];
+
+  @override
+  Future<void> replacePlaylistTracks(
+    String playlistId,
+    List<Track> tracks,
+  ) async {}
+
+  @override
+  Future<List<Track>> cachedPlaylistTracks(String playlistId) async => const [];
+
+  @override
+  Future<List<Track>> tracksMissingArtwork({int limit = 500}) async => const [];
 }
 
 void main() {

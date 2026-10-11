@@ -2,6 +2,7 @@
 
 #include <dwmapi.h>
 #include <flutter_windows.h>
+#include <windowsx.h>
 
 #include "resource.h"
 
@@ -134,6 +135,13 @@ bool Win32Window::Create(const std::wstring& title,
   UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
   double scale_factor = dpi / 96.0;
 
+  // The window keeps WS_OVERLAPPEDWINDOW — and with it Windows' resize
+  // borders, snapping and shadow — but the caption is claimed as client area in
+  // WM_NCCALCSIZE below, so Flutter draws its own title bar and Gandar gets the
+  // window controls a Mac app has. Doing it here rather than from Dart is what
+  // keeps the geometry consistent: a hidden title bar arranged after the window
+  // exists leaves the client area offset by the height the platform still
+  // reserves, which cuts off the bottom of the UI.
   HWND window = CreateWindow(
       window_class, title.c_str(), WS_OVERLAPPEDWINDOW,
       Scale(origin.x, scale_factor), Scale(origin.y, scale_factor),
@@ -212,6 +220,65 @@ Win32Window::MessageHandler(HWND hwnd,
         SetFocus(child_content_);
       }
       return 0;
+
+    case WM_NCCALCSIZE:
+      // wParam TRUE asks how much of the window is client area. The answer is
+      // "all of it": the title bar is Flutter's now.
+      if (wparam == TRUE) {
+        return 0;
+      }
+      break;
+
+    case WM_NCHITTEST: {
+      // Windows still decides what a click on the frame means, which is how
+      // dragging by the top strip and double-click-to-zoom keep working without
+      // a line of Dart. The left corner stays client area because the window
+      // buttons are drawn there by Flutter, and they need the clicks.
+      RECT rect;
+      GetWindowRect(hwnd, &rect);
+      const POINT cursor{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+      constexpr int kBorder = 8;
+      constexpr int kTitleStrip = 38;
+      constexpr int kControlsWidth = 96;
+
+      const bool left = cursor.x < rect.left + kBorder;
+      const bool right = cursor.x >= rect.right - kBorder;
+      const bool top = cursor.y < rect.top + kBorder;
+      const bool bottom = cursor.y >= rect.bottom - kBorder;
+
+      if (top && left) return HTTOPLEFT;
+      if (top && right) return HTTOPRIGHT;
+      if (bottom && left) return HTBOTTOMLEFT;
+      if (bottom && right) return HTBOTTOMRIGHT;
+      if (left) return HTLEFT;
+      if (right) return HTRIGHT;
+      if (top) return HTTOP;
+      if (bottom) return HTBOTTOM;
+
+      if (cursor.y < rect.top + kTitleStrip &&
+          cursor.x > rect.left + kControlsWidth) {
+        return HTCAPTION;
+      }
+      return HTCLIENT;
+    }
+
+    case WM_GETMINMAXINFO: {
+      // A window without a caption is allowed to cover the taskbar when it is
+      // maximized, so the maximized size is pinned to the monitor's work area.
+      HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+      MONITORINFO info = {};
+      info.cbSize = sizeof(info);
+      if (GetMonitorInfo(monitor, &info)) {
+        auto* mmi = reinterpret_cast<MINMAXINFO*>(lparam);
+        mmi->ptMaxPosition.x = info.rcWork.left - info.rcMonitor.left;
+        mmi->ptMaxPosition.y = info.rcWork.top - info.rcMonitor.top;
+        mmi->ptMaxSize.x = info.rcWork.right - info.rcWork.left;
+        mmi->ptMaxSize.y = info.rcWork.bottom - info.rcWork.top;
+        mmi->ptMaxTrackSize.x = mmi->ptMaxSize.x;
+        mmi->ptMaxTrackSize.y = mmi->ptMaxSize.y;
+      }
+      return 0;
+    }
 
     case WM_DWMCOLORIZATIONCOLORCHANGED:
       UpdateTheme(hwnd);
