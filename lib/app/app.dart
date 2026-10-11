@@ -14,6 +14,10 @@ class GandarApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = ref.watch(themeProvider.select((s) => s.active));
+    // Subscribed, not watched: the Discord presence has to be alive for the
+    // whole session, but its status changing is no reason to rebuild every
+    // theme in the app.
+    ref.listen(discordPresenceProvider, (_, _) {});
     return MaterialApp.router(
       title: 'Gandar',
       debugShowCheckedModeBanner: false,

@@ -51,6 +51,13 @@ dependencies:
   collection: ^1.19.1
   window_manager: ^0.5.2
 
+  # Discord Rich Presence talks to the running Discord client over a Windows
+  # named pipe (or a unix domain socket elsewhere). `dart:io` cannot open
+  # either one — `File.open` asks for read-write access it cannot express and
+  # `Socket.connect` is TCP only — so the pipe is opened through `dart:ffi`,
+  # and this package supplies the allocator and UTF-16 helpers for that.
+  ffi: ^2.1.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

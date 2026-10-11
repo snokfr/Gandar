@@ -8,12 +8,15 @@ import '../core/theme/theme_presets.dart';
 import '../core/theme/theme_tokens.dart';
 import '../data/artwork/artwork_enricher.dart';
 import '../data/artwork/artwork_lookup.dart';
+import '../data/discord/discord_ipc.dart';
+import '../data/discord/discord_presence.dart';
 import '../data/feed/artist_feed.dart';
 import '../data/import/library_file_import.dart';
 import '../data/lyrics/lyrics_source.dart';
 import '../data/net/request_gate.dart';
 import '../data/spotify/spotify_public.dart';
 import '../data/spotify/spotify_public_web.dart';
+import '../data/usage/app_usage.dart';
 import '../data/youtube/youtube_search.dart';
 import '../domain/models/album.dart';
 import '../domain/models/listening_stats.dart';
@@ -555,4 +558,258 @@ class ArtworkEnrichmentController extends Notifier<ArtworkProgress?> {
 final artworkEnrichmentProvider =
     NotifierProvider<ArtworkEnrichmentController, ArtworkProgress?>(
       ArtworkEnrichmentController.new,
+    );
+
+// ---------------------------------------------------------------------------
+// Time in Gandar
+// ---------------------------------------------------------------------------
+
+/// Mirrors the app-usage tracker into the widget tree.
+///
+/// The tracker itself is a [ChangeNotifier] owned by [AppDependencies], so this
+/// is a thin adapter rather than a second source of truth: one counter, one
+/// place it is persisted, and the UI reads it like any other provider.
+class AppUsageController extends Notifier<AppUsage> {
+  @override
+  AppUsage build() {
+    final tracker = ref.watch(appDependenciesProvider).appUsage;
+    void listener() => state = tracker.usage;
+    tracker.addListener(listener);
+    ref.onDispose(() => tracker.removeListener(listener));
+    return tracker.usage;
+  }
+}
+
+final appUsageProvider = NotifierProvider<AppUsageController, AppUsage>(
+  AppUsageController.new,
+);
+
+/// The counter itself, for code that wants the raw number without subscribing
+/// to a rebuild — the Discord presence reads it when it pushes.
+final appUsageTrackerProvider = Provider<AppUsageTracker>(
+  (ref) => ref.watch(appDependenciesProvider).appUsage,
+);
+
+// ---------------------------------------------------------------------------
+// Discord Rich Presence
+// ---------------------------------------------------------------------------
+
+/// Opens a connection to Discord. Replaced in tests.
+typedef DiscordConnector = Future<DiscordConnection> Function(String clientId);
+
+final discordConnectorProvider = Provider<DiscordConnector>(
+  (ref) => (clientId) => DiscordIpc.connect(clientId: clientId),
+);
+
+/// What the Discord connection is doing, for the settings screen to report.
+enum DiscordStatus {
+  /// The feature is off.
+  off,
+
+  /// On, but with no Application ID to connect with.
+  needsClientId,
+
+  connecting,
+  connected,
+
+  /// Discord is not reachable, or refused. [DiscordState.detail] says which.
+  failed,
+}
+
+class DiscordState {
+  const DiscordState({required this.status, this.detail});
+
+  final DiscordStatus status;
+
+  /// A sentence for the settings card: why it is not connected.
+  final String? detail;
+
+  bool get connected => status == DiscordStatus.connected;
+}
+
+/// Keeps the Discord profile in step with what Gandar is playing.
+///
+/// Everything here fails soft. Discord is an optional side-channel: if it is
+/// not installed, not running, not signed in, or simply slow, the app plays
+/// music exactly as it did before, and the settings card says what happened.
+///
+/// The presence is *pushed on change*, not polled: playback notifies through
+/// [PlaybackController], the settings through this provider, and a five-minute
+/// timer exists only because the "time in Gandar" line drifts while nothing
+/// else changes.
+class DiscordPresenceController extends Notifier<DiscordState> {
+  DiscordConnection? _connection;
+  Timer? _debounce;
+  Timer? _heartbeat;
+  Timer? _reconnect;
+  Duration _backoff = DiscordPolicy.initialBackoff;
+
+  /// Long enough to coalesce the several notifications one track change
+  /// produces, short enough that the profile feels immediate.
+  static const Duration _debounceDelay = Duration(milliseconds: 150);
+
+  @override
+  DiscordState build() {
+    final playback = ref.watch(playbackControllerProvider);
+
+    void onPlayback() => _schedule();
+    playback.addListener(onPlayback);
+
+    ref.listen(playbackSettingsProvider, (previous, next) {
+      if (previous?.discordEnabled == next.discordEnabled &&
+          previous?.discordClientId == next.discordClientId &&
+          previous?.discordShowTrack == next.discordShowTrack &&
+          previous?.discordShowAppTime == next.discordShowAppTime) {
+        return;
+      }
+      // Turning it off is the one change that must not wait for a debounce:
+      // the user has just asked for the presence to disappear.
+      if (next.discordEnabled == false) {
+        unawaited(_forget());
+      }
+      _backoff = DiscordPolicy.initialBackoff;
+      _schedule();
+    });
+
+    ref.onDispose(() {
+      playback.removeListener(onPlayback);
+      _debounce?.cancel();
+      _heartbeat?.cancel();
+      _reconnect?.cancel();
+      _connection?.close();
+      _connection = null;
+    });
+
+    // Deferred: `state` cannot be written during build.
+    Future<void>.microtask(_schedule);
+    return const DiscordState(status: DiscordStatus.off);
+  }
+
+  void _schedule() {
+    _debounce?.cancel();
+    _debounce = Timer(_debounceDelay, () => unawaited(_sync()));
+  }
+
+  /// Clears the presence and drops the connection, without touching status.
+  Future<void> _forget() async {
+    _reconnect?.cancel();
+    _reconnect = null;
+    _heartbeat?.cancel();
+    _heartbeat = null;
+    final connection = _connection;
+    _connection = null;
+    if (connection == null) return;
+    try {
+      await connection.setActivity(null);
+    } catch (_) {
+      // Discord may already be gone; dropping the handle is what matters.
+    }
+    connection.close();
+  }
+
+  Future<void> _sync() async {
+    if (!ref.mounted) return;
+    final settings = ref.read(playbackSettingsProvider);
+
+    switch (DiscordPolicy.intentFor(settings)) {
+      case DiscordIntent.clear:
+        await _forget();
+        _set(const DiscordState(status: DiscordStatus.off));
+        return;
+      case DiscordIntent.needClientId:
+        await _forget();
+        _set(const DiscordState(status: DiscordStatus.needsClientId));
+        return;
+      case DiscordIntent.publish:
+        break;
+    }
+
+    if (_connection == null || !_connection!.isOpen) {
+      _set(const DiscordState(status: DiscordStatus.connecting));
+      try {
+        final connection = await ref.read(discordConnectorProvider)(
+          settings.discordClientId,
+        );
+        if (!ref.mounted) {
+          connection.close();
+          return;
+        }
+        _connection = connection;
+        _backoff = DiscordPolicy.initialBackoff;
+        _heartbeat ??= Timer.periodic(
+          const Duration(minutes: 5),
+          (_) => unawaited(_sync()),
+        );
+      } on DiscordUnavailable catch (e) {
+        _fail(e.message);
+        return;
+      } catch (e) {
+        _fail('Could not reach Discord: $e');
+        return;
+      }
+    }
+
+    await _push(settings);
+  }
+
+  /// Builds the activity from live playback state and sends it.
+  Future<void> _push(PlaybackSettings settings) async {
+    final connection = _connection;
+    if (connection == null) return;
+    final playback = ref.read(playbackControllerProvider);
+
+    final activity = DiscordPresence.build(
+      enabled: true,
+      showTrack: settings.discordShowTrack,
+      showAppTime: settings.discordShowAppTime,
+      track: playback.currentTrack,
+      isPlaying: playback.isPlaying,
+      position: playback.position,
+      duration: playback.duration,
+      lifetime: ref.read(appUsageTrackerProvider).usage.lifetimeIncludingSession,
+    );
+
+    try {
+      await connection.setActivity(activity);
+    } on DiscordUnavailable catch (e) {
+      // A connection that failed mid-send is not worth keeping: the pipe is
+      // gone, and leaving the handle open would swallow every later update.
+      _connection = null;
+      connection.close();
+      _fail(e.message);
+      return;
+    } catch (e) {
+      _connection = null;
+      connection.close();
+      _fail('Could not update Discord: $e');
+      return;
+    }
+    if (ref.mounted) _set(const DiscordState(status: DiscordStatus.connected));
+  }
+
+  void _fail(String detail) {
+    AppLogger.instance.debug('discord', detail);
+    _set(DiscordState(status: DiscordStatus.failed, detail: detail));
+    _scheduleReconnect();
+  }
+
+  /// Discord may simply not have been open yet when the app started, so a
+  /// failure is retried — backing off, because a machine without Discord at all
+  /// should not spin.
+  void _scheduleReconnect() {
+    _reconnect?.cancel();
+    _reconnect = Timer(_backoff, () => unawaited(_sync()));
+    _backoff = DiscordPolicy.nextBackoff(_backoff);
+  }
+
+  void _set(DiscordState next) {
+    if (!ref.mounted) return;
+    if (state.status == next.status && state.detail == next.detail) return;
+    state = next;
+  }
+}
+
+final discordPresenceProvider =
+    NotifierProvider<DiscordPresenceController, DiscordState>(
+      DiscordPresenceController.new,
     );

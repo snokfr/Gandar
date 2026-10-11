@@ -130,6 +130,12 @@ Future<void> main() async {
         ),
       );
 
+      // Counting starts as soon as there is a graph to count into. The tracker
+      // folds the session into the stored total once a minute rather than only
+      // at exit, because the exit hooks are platform-specific and a process
+      // that is killed never runs one at all.
+      dependencies.appUsage.start();
+
       runApp(
         ProviderScope(
           overrides: [appDependenciesProvider.overrideWithValue(dependencies)],

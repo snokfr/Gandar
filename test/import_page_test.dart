@@ -14,6 +14,7 @@ import 'package:gandar/data/cache/cache_manager.dart';
 import 'package:gandar/data/repositories/local_repositories.dart';
 import 'package:gandar/data/spotify/spotify_public_web.dart';
 import 'package:gandar/data/storage/app_database.dart';
+import 'package:gandar/data/usage/app_usage.dart';
 import 'package:gandar/domain/models/resolved_stream.dart';
 import 'package:gandar/domain/models/track.dart';
 import 'package:gandar/domain/repositories/repositories.dart';
@@ -72,6 +73,7 @@ class _NoopResolver implements AudioResolver {
     cacheManager: CacheManager(repository: DriftCacheRepository(database)),
     audioResolver: resolver,
     audioEngine: FakeAudioEngine(),
+    appUsage: AppUsageTracker(store: InMemoryStore()),
     playbackController: PlaybackController(
       engine: FakeAudioEngine(),
       preloader: StreamPreloader(resolver: resolver),

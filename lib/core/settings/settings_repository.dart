@@ -56,6 +56,10 @@ class SettingsRepository {
 
   final KeyValueStore _store;
 
+  /// The underlying store, for the few other things that need somewhere small
+  /// and persistent to put a number — the app-usage counter, currently.
+  KeyValueStore get store => _store;
+
   static const String _playbackKey = 'settings.playback.v1';
   static const String _activeThemeKey = 'settings.theme.active.v1';
   static const String _customThemesKey = 'settings.theme.custom.v1';

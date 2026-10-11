@@ -8,6 +8,7 @@ import '../core/theme/theme_tokens.dart';
 import '../data/cache/cache_manager.dart';
 import '../data/repositories/local_repositories.dart';
 import '../data/storage/app_database.dart';
+import '../data/usage/app_usage.dart';
 import '../data/youtube/youtube_explode_resolver.dart';
 import '../domain/repositories/repositories.dart';
 import '../playback/audio_engine/audio_engine.dart';
@@ -37,6 +38,7 @@ class AppDependencies {
     required this.audioResolver,
     required this.audioEngine,
     required this.playbackController,
+    required this.appUsage,
     this.logLevel = LogLevel.info,
   });
 
@@ -53,6 +55,9 @@ class AppDependencies {
   final AudioResolver audioResolver;
   final AudioEngine audioEngine;
   final PlaybackController playbackController;
+
+  /// How long the app has been open, this run and ever.
+  final AppUsageTracker appUsage;
 
   /// Log verbosity in force at startup.
   final LogLevel logLevel;
@@ -78,6 +83,11 @@ class AppDependencies {
     final cacheRepository = DriftCacheRepository(database);
     final libraryRepository = DriftLibraryRepository(database);
     final cacheManager = CacheManager(repository: cacheRepository);
+
+    final appUsage = AppUsageTracker(store: settingsRepository.store);
+    // The stored total is read before anything can ask for it, so the first
+    // frame of the Discord presence and the activity view agree.
+    await appUsage.load();
 
     final resolver = YoutubeExplodeResolver(mappings: mappingRepository);
     final preloader = StreamPreloader(resolver: resolver);
@@ -113,6 +123,7 @@ class AppDependencies {
       audioResolver: resolver,
       audioEngine: audioEngine,
       playbackController: controller,
+      appUsage: appUsage,
       logLevel: AppLogger.instance.minLevel,
     );
   }

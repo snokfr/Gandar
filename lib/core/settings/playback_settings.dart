@@ -118,6 +118,10 @@ class PlaybackSettings {
     this.savingsAdsPerBreak = 1.0,
     this.savingsAdsCpm = 20.0,
     this.savingsArtistPayoutPerStream = 0.004,
+    this.discordEnabled = false,
+    this.discordClientId = '',
+    this.discordShowTrack = true,
+    this.discordShowAppTime = true,
   });
 
   /// 10-band ISO center frequencies.
@@ -193,6 +197,23 @@ class PlaybackSettings {
   /// Estimated rights-holder payout per stream, in US dollars.
   final double savingsArtistPayoutPerStream;
 
+  // ---- Discord Rich Presence ------------------------------------------
+
+  /// Whether the Discord profile is updated while Gandar plays.
+  final bool discordEnabled;
+
+  /// The Discord *Application ID* — public, and the only value the local IPC
+  /// handshake carries. It lives in settings rather than in the source so
+  /// anyone can point Gandar at their own Discord application; see
+  /// `docs/discord.md`.
+  final String discordClientId;
+
+  /// Show the song and artist, or keep the profile anonymous.
+  final bool discordShowTrack;
+
+  /// Show how long Gandar has been open as the second line of the presence.
+  final bool discordShowAppTime;
+
   PlaybackSettings copyWith({
     bool? eqEnabled,
     String? eqPreset,
@@ -216,6 +237,10 @@ class PlaybackSettings {
     double? savingsAdsPerBreak,
     double? savingsAdsCpm,
     double? savingsArtistPayoutPerStream,
+    bool? discordEnabled,
+    String? discordClientId,
+    bool? discordShowTrack,
+    bool? discordShowAppTime,
   }) {
     return PlaybackSettings(
       eqEnabled: eqEnabled ?? this.eqEnabled,
@@ -243,6 +268,10 @@ class PlaybackSettings {
       savingsAdsCpm: savingsAdsCpm ?? this.savingsAdsCpm,
       savingsArtistPayoutPerStream:
           savingsArtistPayoutPerStream ?? this.savingsArtistPayoutPerStream,
+      discordEnabled: discordEnabled ?? this.discordEnabled,
+      discordClientId: discordClientId ?? this.discordClientId,
+      discordShowTrack: discordShowTrack ?? this.discordShowTrack,
+      discordShowAppTime: discordShowAppTime ?? this.discordShowAppTime,
     );
   }
 
@@ -259,6 +288,11 @@ class PlaybackSettings {
       savingsAdsCpm: savingsAdsCpm.clamp(0.0, 200.0),
       savingsArtistPayoutPerStream:
           savingsArtistPayoutPerStream.clamp(0.0, 1.0),
+      // A pasted id arrives with whatever whitespace the clipboard held, and a
+      // trailing space is the difference between a working handshake and a
+      // silent one. Whether the id is *valid* is Discord's business; the app
+      // just refuses to open a connection while it is empty.
+      discordClientId: discordClientId.trim(),
       eqBands: _normalizeBands(eqBands),
       customEqPresets: _normalizeCustomPresets(customEqPresets),
     );
@@ -325,6 +359,10 @@ class PlaybackSettings {
     'savingsAdsPerBreak': savingsAdsPerBreak,
     'savingsAdsCpm': savingsAdsCpm,
     'savingsArtistPayoutPerStream': savingsArtistPayoutPerStream,
+    'discordEnabled': discordEnabled,
+    'discordClientId': discordClientId,
+    'discordShowTrack': discordShowTrack,
+    'discordShowAppTime': discordShowAppTime,
   };
 
   static PlaybackSettings fromJson(Map<String, dynamic> j) {
@@ -373,6 +411,10 @@ class PlaybackSettings {
       savingsAdsCpm: (j['savingsAdsCpm'] as num?)?.toDouble() ?? 20.0,
       savingsArtistPayoutPerStream:
           (j['savingsArtistPayoutPerStream'] as num?)?.toDouble() ?? 0.004,
+      discordEnabled: j['discordEnabled'] as bool? ?? false,
+      discordClientId: j['discordClientId'] as String? ?? '',
+      discordShowTrack: j['discordShowTrack'] as bool? ?? true,
+      discordShowAppTime: j['discordShowAppTime'] as bool? ?? true,
     ).sanitized();
   }
 
@@ -402,6 +444,10 @@ class PlaybackSettings {
           other.savingsAdsCpm == savingsAdsCpm &&
           other.savingsArtistPayoutPerStream ==
               savingsArtistPayoutPerStream &&
+          other.discordEnabled == discordEnabled &&
+          other.discordClientId == discordClientId &&
+          other.discordShowTrack == discordShowTrack &&
+          other.discordShowAppTime == discordShowAppTime &&
           _bandsEqual(other.eqBands, eqBands);
 
   static bool _customPresetsEqual(
@@ -450,5 +496,9 @@ class PlaybackSettings {
     savingsAdsPerBreak,
     savingsAdsCpm,
     savingsArtistPayoutPerStream,
+    discordEnabled,
+    discordClientId,
+    discordShowTrack,
+    discordShowAppTime,
   ]);
 }

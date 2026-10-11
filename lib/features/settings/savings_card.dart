@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/theme_engine.dart';
+import '../../data/usage/app_usage.dart';
 import '../../domain/models/listening_stats.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
@@ -20,6 +21,7 @@ class SavingsCard extends ConsumerWidget {
     final stats = ref.watch(listeningStatsProvider);
     final settings = ref.watch(playbackSettingsProvider);
     final notifier = ref.read(playbackSettingsProvider.notifier);
+    final usage = ref.watch(appUsageProvider);
     final theme = Theme.of(context);
 
     return stats.when(
@@ -106,6 +108,13 @@ class SavingsCard extends ConsumerWidget {
                   label: 'Different songs',
                   value: '${data.distinctTracks}',
                   hint: 'of ${data.totalPlays} plays',
+                ),
+                _Metric(
+                  label: 'Time in Gandar',
+                  value: describeShortDuration(usage.lifetimeIncludingSession),
+                  hint:
+                      '${describeShortDuration(usage.session)} this session, '
+                      'counting from launch',
                 ),
               ],
             ),

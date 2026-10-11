@@ -13,6 +13,7 @@ import '../../domain/models/cache_entry.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
 import '../player/player_surface.dart';
+import 'discord_card.dart';
 import 'eq_editor.dart';
 import 'savings_card.dart';
 
@@ -299,7 +300,16 @@ class SettingsPage extends ConsumerWidget {
               ],
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 28),
+
+          // ---- Discord --------------------------------------------------
+          const SectionHeader(
+            title: 'Discord',
+            subtitle: 'What your profile shows while you listen',
+          ),
+          const SizedBox(height: 16),
+          const DiscordCard(),
+          const SizedBox(height: 28),
 
           // ---- Diagnostics ----------------------------------------------
           GandarCard(
