@@ -21,6 +21,8 @@ Metadata comes from Spotify; the audio never does.
 | --- | --- |
 | [docs/styling.md](docs/styling.md) | **Write your own theme.** The custom theme file format: field-by-field reference, colour formats, validation errors, worked examples, checklist |
 | [docs/building.md](docs/building.md) | Install Flutter, run in debug, build a release, where the release build lands, packaging and signing, GitHub Actions releases, troubleshooting |
+| [docs/discord.md](docs/discord.md) | **Discord Rich Presence.** Portal setup, the art assets and their exact names, what each profile slot shows, and how to verify it against a real client |
+| [docs/platforms.md](docs/platforms.md) | Why a 32-bit Windows build is not possible, what Windows arm64 would need, and a platform-by-platform assessment of macOS and Linux |
 | [docs/architecture.md](docs/architecture.md) | Layer boundaries and the reasoning behind the audio engine, extraction, auth and database choices |
 | [docs/theming-internals.md](docs/theming-internals.md) | Contributors only: how design tokens become a Material theme, and the rules that keep user themes working |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Where to add settings, themes, migrations and tests |
@@ -125,6 +127,22 @@ Metadata comes from Spotify; the audio never does.
 - Automatic eviction by maximum disk usage and by idle days (LRU).
 - Permanent `track → YouTube video` mapping cache, so a song you have played
   once resolves instantly forever after.
+
+**Discord Rich Presence**
+
+- Show **what you are playing, with the artist and album**, on your Discord
+  profile — and **how long you have spent in Gandar**, counted from launch
+  rather than from playback.
+- The track line carries a **live progress timer** while playing and drops it
+  while paused, because Discord's clock keeps running on its own.
+- Configurable in Settings: the Application ID, whether the song is shown at
+  all, and whether the time in Gandar appears.
+- It fails soft in every direction. No Discord, no signed-in client, no
+  Application ID — the app plays music exactly as it did and the card says which
+  of those it is. Retries back off from five seconds to five minutes.
+- The client is written against `dart:ffi` rather than `dart:io`, because
+  `dart:io` cannot open a Windows named pipe at all: see
+  [docs/discord.md](docs/discord.md).
 
 **Artwork that does not leave holes**
 
@@ -338,11 +356,18 @@ playlist).
   not a per-hour ad figure or a per-stream rate. The card therefore models the
   ad load from external observations, prints every assumption, and lists its
   sources on screen. Treat the totals as an illustration, not an accounting.
-- **Discord Rich Presence is not implemented yet.** It needs an application id
-  from the Discord Developer Portal, which is the user's to create; the setup
-  is documented in
-  [docs/discord.md](docs/discord.md) and the feature is not wired up until that
-  exists.
+- **Discord Rich Presence needs an application you create.** The app half is
+  built and verified, but the presence is silent until you register an
+  application on the Discord Developer Portal, paste its Application ID into
+  Settings → Discord, and upload the three art assets under their exact names.
+  Until the art is uploaded Discord accepts the presence and silently drops the
+  image keys. It is also **Windows-only** so far: the transport reaches a pipe
+  on Windows, and macOS/Linux would need a unix-domain-socket equivalent. See
+  [docs/discord.md](docs/discord.md).
+- **Time in Gandar counts from launch, not from playback**, and is written to
+  disk once a minute. A process that is killed loses up to that minute, and a
+  machine that sleeps is not counted as listening — a single tick is capped at
+  90 seconds so a suspended laptop cannot add eight hours at once.
 - **Light themes are less battle-tested than dark ones.** The default is dark;
   [Paper Light](examples/themes/paper_light.gandar-theme.json) is the only light
   example, and contrast is not automatic outside the accent pair.
@@ -350,8 +375,15 @@ playlist).
   reference holder tries to write a lock file into `%TEMP%`. Its failure is
   harmless (the code path returns immediately when not in debug mode) and does
   not occur in release builds.
-- **Linux/macOS desktop** need their `media_kit_libs_*` packages added before
-  they will build; Phase 1 targets Windows.
+- **No 32-bit Windows build exists, and none can.** Flutter's Windows desktop
+  toolchain emits x64 and arm64 only, and upstream has no plans to change that.
+  Windows arm64 is the available alternative and needs an arm64 build host.
+  See [docs/platforms.md](docs/platforms.md).
+- **Linux/macOS desktop** would need their `media_kit_libs_*` packages, the
+  platform scaffolding, a per-platform window chrome and (on macOS) signing and
+  notarisation before they would build and ship. Most of the app is already
+  portable; the specific blockers are enumerated in
+  [docs/platforms.md](docs/platforms.md).
 
 ## Legal
 
