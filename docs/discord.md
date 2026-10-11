@@ -1,14 +1,43 @@
 # Discord Rich Presence — what you do, and what Gandar does
 
-This document is the setup half of Discord Rich Presence. It is written as a
-checklist because **none of it can be done from inside Gandar**: it needs an
-application registered on the Discord Developer Portal, which only you can
-create.
+This document is the setup half of Discord Rich Presence. The app half is
+built — Settings → **Discord** holds the Application ID and the toggles, and
+`lib/data/discord/` holds the client — but the part below cannot be done from
+inside Gandar, because it happens on Discord's website.
 
-The app half is built: Settings → **Discord** has the Application ID field and
-the two display toggles, and `lib/data/discord/` holds the client. What is left
-is the portal work below, which only you can do — plus uploading the art assets,
-without which Discord shows the activity with no picture.
+## First: what "register an application" even means
+
+Nothing is installed. No code is uploaded. No account is created. Discord's
+**Developer Portal** is a form that lets you *name a thing*, and it hands that
+name a long number called an **Application ID**.
+
+Discord needs this because of who draws what: Discord draws the activity, on
+Discord's servers, next to your username. So Discord has to know which name to
+print and which little picture belongs beside it. Registering is how you tell
+it. Gandar never talks to the portal; it only tells the Discord client on your
+machine "show this activity as application *1558961358882607236*", and Discord
+looks up the rest.
+
+That is the whole concept. It is five minutes of filling in a web form, and it
+is the only part Gandar cannot do for you.
+
+---
+
+## Where each piece goes
+
+There are exactly two things to move, and **they go to different places**.
+This is the bit that is easiest to get backwards:
+
+| What | Where it goes | Why |
+| --- | --- | --- |
+| The three PNGs in [`assets/discord/`](../assets/discord/) | **Uploaded to Discord**, on your application's art page | Discord serves the picture. Gandar only ever sends the *name* of it |
+| The **Application ID** | **Pasted into Gandar**: Settings → Discord | Gandar sends it in the local handshake, so Discord knows whose artwork to use |
+
+The PNG files do **not** go into the Gandar folder, and nothing about the art is
+compiled in. `lib/data/discord/discord_presence.dart` refers to `gandar`,
+`playing` and `paused` as plain strings; Discord resolves those names on its
+own side. That is why the presence starts working the moment you paste the ID,
+and the picture shows up a minute or two after the art is uploaded.
 
 ---
 
@@ -24,38 +53,64 @@ Your Discord profile shows:
 
 ---
 
-## What you need to do
+## Step 1 — register the application
 
-### 1. Create the Discord application
+1. Open <https://discord.com/developers/applications> in a browser, signed in as
+   yourself.
+2. Click **New Application**.
+3. Type `Gandar` as the name and accept the terms, then **Create**. If the name
+   is already taken by somebody else, use any other name — it is a label that
+   appears on your profile, not a username and not unique to you.
+4. You are now on the application's **General Information** page. Under
+   **Application ID**, click **Copy**. It is a long number, something like
+   `1558961358882607236`.
+5. Open Gandar → **Settings → Discord**, paste it into the **Application ID**
+   field, click **Save**, then turn on **Show what I am playing**.
 
-1. Go to <https://discord.com/developers/applications>.
-2. **New Application**, and name it `Gandar`. The name is what people see next
-   to the activity, so it is worth getting right.
-3. On the **General Information** page, copy the **Application ID** (a long
-   number). That is the only value Gandar needs.
+The chip beside the word *Discord* should move from **No ID** to **Connecting**
+and settle on **Connected**. The presence is now live — with no picture yet.
 
-The Application ID is **public**. It is not a secret, it is not a token, and
-there is no client secret involved: Rich Presence talks to the Discord client
-already running on your machine over a local socket, and that connection
-authenticates with nothing but this id. So it is safe to send it to me, safe to
-put in a settings field, and safe to commit.
+> Discord's portal renames its menu items every so often. The two things that
+> actually matter are unchanged: the **Application ID** on General Information,
+> and the **asset names** below.
 
-### 2. Add artwork (optional, but it is what makes it look right)
+The Application ID is **public**. It is not a secret, it is not a token, and no
+client secret is involved: Rich Presence talks to the Discord client on your own
+machine over a local socket, and that connection authenticates with nothing but
+this id. It is safe in a settings field and safe to commit.
 
-On the same application, open **Rich Presence → Art Assets** and upload:
+## Step 2 — add the artwork (optional, but it is the picture)
 
-| Asset name | What it is | Where it shows |
+1. Still in the portal with your application selected, open **Rich Presence →
+   Art Assets** in the left sidebar.
+2. Upload these three files from this repository:
+
+| Upload this file | Asset name must be | It appears as |
 | --- | --- | --- |
-| `gandar` | The app logo, 512×512 PNG | The large image next to the activity |
-| `playing` | A play symbol | Small badge while playing |
-| `paused` | A pause symbol | Small badge while paused |
+| [`assets/discord/gandar.png`](../assets/discord/gandar.png) | `gandar` | the large image beside the activity |
+| [`assets/discord/playing.png`](../assets/discord/playing.png) | `playing` | the small badge while playing |
+| [`assets/discord/paused.png`](../assets/discord/paused.png) | `paused` | the small badge while paused |
 
-The **asset names** are what the code refers to, so they must match exactly
-(`gandar`, not `Gandar.png`). Uploading a replacement later under the same name
-takes effect on its own after a short cache delay.
+3. Give Discord a minute. Art is cached on their side, and a presence set just
+   before an upload can keep showing nothing for a short while.
 
-Until these exist, Discord accepts the presence but silently drops the image
-keys — the activity still appears, with no picture. That is what a real
+Discord names an asset after the file it came from, minus the extension — which
+is why the files are already named `gandar.png`, `playing.png` and `paused.png`.
+If your upload dialog offers a separate name field, use the same three names. If
+it offers to replace an existing asset, that is the same thing as renaming: the
+name is the contract, not the image.
+
+To see exactly what you are uploading before you upload it — and at the size
+Discord actually draws the badges — open the proof sheet, which inlines the
+images so it works from anywhere:
+
+```bash
+python tool/generate_icon.py --discord-assets assets/discord \
+  --proof build/icon-proof.html
+```
+
+Until the art exists, Discord accepts the presence and **silently drops the
+image keys** — the activity still appears, with no picture. That is what a real
 round-trip looked like before they were uploaded:
 
 ```json
@@ -64,10 +119,8 @@ round-trip looked like before they were uploaded:
  "name":"Gandar","application_id":"…"}}
 ```
 
-`large_image` and `small_image` are absent from the echo because the assets were
-not there to resolve them to.
-
-Ready-to-upload PNGs for all three are generated by `tool/generate_icon.py`; see
+`large_image` and `small_image` are absent from the echo because there was
+nothing on Discord's side to resolve those names to. See
 [The Discord profile line](#the-discord-profile-line) for what each slot shows.
 
 ### 3. Keep the Discord desktop app running

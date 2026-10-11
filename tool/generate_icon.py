@@ -463,7 +463,11 @@ PROOF_SHEET = """<!doctype html>
 """
 
 
-def write_proof_sheet(path: Path, images: list[tuple[int, bytes]]) -> None:
+def write_proof_sheet(
+    path: Path,
+    images: list[tuple[int, bytes]],
+    discord: list[tuple[str, bytes]] | None = None,
+) -> None:
     """A self-contained HTML proof sheet, so the icon can be eyeballed.
 
     Each PNG is embedded inline: the file can be opened from anywhere, with no
@@ -482,6 +486,36 @@ def write_proof_sheet(path: Path, images: list[tuple[int, bytes]]) -> None:
         for size in sorted(by_size)
         if size <= 128
     )
+    # The Discord assets, when there are any, are inlined here too. A page with
+    # sibling <img> references only renders if whatever is showing it serves
+    # those neighbours, and the preview pane does not: it serves the one file.
+    discord_sections = ""
+    if discord:
+        by_name = dict(discord)
+
+        def asset(name: str) -> str:
+            encoded = base64.b64encode(by_name[name]).decode()
+            return f"data:image/png;base64,{encoded}"
+
+        def row(width: int) -> str:
+            return "".join(
+                f'<figure><img src="{asset(name)}" width="{width}" '
+                f'height="{width}"><figcaption>{name}</figcaption></figure>'
+                for name, _ in discord
+            )
+
+        discord_sections = f"""
+<section><h2>Discord assets — these three names are the whole contract</h2>
+  <div class="row">{row(128)}</div></section>
+<section><h2>The badges at the size Discord actually draws them (20 px)</h2>
+  <div class="row">{row(20)}</div></section>
+<section class="light"><h2>And on the light profile surface</h2>
+  <div class="row">{row(20)}</div></section>
+<section><h2>As the profile will show it</h2>
+  <div class="bar"><img src="{asset('gandar')}" width="24" height="24">
+  Posed 2 &middot; sxprano &middot; 12 h 30 m in Gandar</div></section>
+"""
+
     body = f"""
 <section><h2>Each packaged size, drawn at its real pixel size</h2>
   <div class="row">{real}</div></section>
@@ -497,7 +531,7 @@ def write_proof_sheet(path: Path, images: list[tuple[int, bytes]]) -> None:
   <div style="height:8px"></div>
   <div class="bar"><img src="{biggest}" width="24" height="24"> Gandar \u2014 Liked Songs</div>
 </section>
-"""
+{discord_sections}"""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(PROOF_SHEET.format(body=body), encoding="utf-8")
 
@@ -561,13 +595,17 @@ def main() -> int:
         args.preview.write_bytes(dict(images)[size])
         print(f"Wrote {args.preview} ({size}x{size})")
 
-    if args.proof:
-        write_proof_sheet(args.proof, images)
-        print(f"Wrote {args.proof}")
-
+    # Written before the proof sheet, so the sheet can inline them.
+    discord_written: list[tuple[str, bytes]] = []
     if args.discord_assets:
         for name, path in write_discord_assets(args.discord_assets):
-            print(f"Wrote {path} ({DISCORD_SIZES[name]}x{DISCORD_SIZES[name]})")
+            size = DISCORD_SIZES[name]
+            print(f"Wrote {path} ({size}x{size})")
+            discord_written.append((name, path.read_bytes()))
+
+    if args.proof:
+        write_proof_sheet(args.proof, images, discord=discord_written)
+        print(f"Wrote {args.proof}")
     return 0
 
 
