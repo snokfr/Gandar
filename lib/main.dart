@@ -106,7 +106,7 @@ Future<void> main() async {
         log.warn(
           'startup',
           'playback has no writable temp directory of its own; if tracks fail '
-          'to start, that is why',
+              'to start, that is why',
         );
       }
 

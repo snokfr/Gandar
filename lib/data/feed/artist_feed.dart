@@ -184,9 +184,7 @@ class ArtistFeed {
     }
     if (wanted.isEmpty) return const <FeedVideo>[];
 
-    final perArtist = await Future.wait(
-      wanted.map(_feedForArtist),
-    );
+    final perArtist = await Future.wait(wanted.map(_feedForArtist));
     return merge(perArtist);
   }
 

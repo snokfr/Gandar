@@ -96,11 +96,8 @@ class _FakeLibrary implements LibraryRepository {
   Future<List<Track>> cachedPlaylistTracks(String playlistId) async => const [];
 
   @override
-  Future<Playlist> createPlaylist(String name) async => Playlist(
-    id: '${Playlist.localPrefix}0',
-    name: name,
-    isLocal: true,
-  );
+  Future<Playlist> createPlaylist(String name) async =>
+      Playlist(id: '${Playlist.localPrefix}0', name: name, isLocal: true);
 
   @override
   Future<void> renamePlaylist(String playlistId, String name) async {}
@@ -289,17 +286,14 @@ void main() {
     });
 
     test('falls back to the album cover when nothing else has one', () async {
-      final library = _FakeLibrary(
-        <Track>[
-          Track(
-            id: 'a',
-            title: 'B-Side No One Indexed',
-            artists: const <String>['An Artist'],
-            album: 'An Album',
-          ),
-        ],
-        siblingArtwork: false,
-      );
+      final library = _FakeLibrary(<Track>[
+        Track(
+          id: 'a',
+          title: 'B-Side No One Indexed',
+          artists: const <String>['An Artist'],
+          album: 'An Album',
+        ),
+      ], siblingArtwork: false);
       final source = _FakeSource(
         const <String, String?>{},
         albumCovers: <String, String?>{
@@ -320,23 +314,20 @@ void main() {
     });
 
     test('asks for an album cover once, not once per track', () async {
-      final library = _FakeLibrary(
-        <Track>[
-          Track(
-            id: 'a',
-            title: 'One',
-            artists: const <String>['An Artist'],
-            album: 'An Album',
-          ),
-          Track(
-            id: 'b',
-            title: 'Two',
-            artists: const <String>['An Artist'],
-            album: 'An Album',
-          ),
-        ],
-        siblingArtwork: false,
-      );
+      final library = _FakeLibrary(<Track>[
+        Track(
+          id: 'a',
+          title: 'One',
+          artists: const <String>['An Artist'],
+          album: 'An Album',
+        ),
+        Track(
+          id: 'b',
+          title: 'Two',
+          artists: const <String>['An Artist'],
+          album: 'An Album',
+        ),
+      ], siblingArtwork: false);
       final source = _FakeSource(
         const <String, String?>{},
         albumCovers: <String, String?>{
@@ -347,7 +338,10 @@ void main() {
       await ArtworkEnricher(library: library, source: source).run();
 
       expect(source.askedAlbums, hasLength(1));
-      expect(library.tracks.every((t) => t.artworkUrl == 'https://art/album.jpg'), isTrue);
+      expect(
+        library.tracks.every((t) => t.artworkUrl == 'https://art/album.jpg'),
+        isTrue,
+      );
     });
 
     test('a source that throws is a missing cover, not a crash', () async {

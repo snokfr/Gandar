@@ -37,7 +37,8 @@ void main() {
       expect(
         AppDirectory.lastChoice,
         first.path,
-        reason: 'the log should name the directory without calling it a '
+        reason:
+            'the log should name the directory without calling it a '
             'fallback when it was the first choice',
       );
     });

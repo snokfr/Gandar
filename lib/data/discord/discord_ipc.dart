@@ -108,24 +108,28 @@ class _Kernel32 {
             Uint32,
             IntPtr,
           ),
-          int Function(
-            Pointer<Utf16>,
-            int,
-            int,
-            int,
-            int,
-            int,
-            int,
-          )
+          int Function(Pointer<Utf16>, int, int, int, int, int, int)
         >('CreateFileW');
     readFile = _lib
         .lookupFunction<
-          Int32 Function(IntPtr, Pointer<Uint8>, Uint32, Pointer<Uint32>, Pointer<Void>),
+          Int32 Function(
+            IntPtr,
+            Pointer<Uint8>,
+            Uint32,
+            Pointer<Uint32>,
+            Pointer<Void>,
+          ),
           int Function(int, Pointer<Uint8>, int, Pointer<Uint32>, Pointer<Void>)
         >('ReadFile');
     writeFile = _lib
         .lookupFunction<
-          Int32 Function(IntPtr, Pointer<Uint8>, Uint32, Pointer<Uint32>, Pointer<Void>),
+          Int32 Function(
+            IntPtr,
+            Pointer<Uint8>,
+            Uint32,
+            Pointer<Uint32>,
+            Pointer<Void>,
+          ),
           int Function(int, Pointer<Uint8>, int, Pointer<Uint32>, Pointer<Void>)
         >('WriteFile');
     peekNamedPipe = _lib
@@ -162,29 +166,24 @@ class _Kernel32 {
   }
 
   final DynamicLibrary _lib;
-  late final int Function(
-    Pointer<Utf16>,
-    int,
-    int,
-    int,
-    int,
-    int,
-    int,
-  ) createFile;
+  late final int Function(Pointer<Utf16>, int, int, int, int, int, int)
+  createFile;
   late final int Function(
     int,
     Pointer<Uint8>,
     int,
     Pointer<Uint32>,
     Pointer<Void>,
-  ) readFile;
+  )
+  readFile;
   late final int Function(
     int,
     Pointer<Uint8>,
     int,
     Pointer<Uint32>,
     Pointer<Void>,
-  ) writeFile;
+  )
+  writeFile;
   late final int Function(
     int,
     Pointer<Uint8>,
@@ -192,7 +191,8 @@ class _Kernel32 {
     Pointer<Uint32>,
     Pointer<Uint32>,
     Pointer<Uint32>,
-  ) peekNamedPipe;
+  )
+  peekNamedPipe;
   late final int Function(int) closeHandle;
   late final int Function(Pointer<Utf16>, int) waitNamedPipe;
   late final int Function() getLastError;
@@ -281,8 +281,7 @@ class _WindowsPipe implements DiscordTransport {
       if (handle != _Kernel32.invalidHandleValue) {
         return _WindowsPipe._(handle, path);
       }
-      if (error != _Kernel32.errorPipeBusy ||
-          elapsed.elapsed >= busyTimeout) {
+      if (error != _Kernel32.errorPipeBusy || elapsed.elapsed >= busyTimeout) {
         throw _Win32Failure(path, error);
       }
       final wait = path.toNativeUtf16();
@@ -363,13 +362,7 @@ class _WindowsPipe implements DiscordTransport {
     final buffer = malloc<Uint8>(max);
     final read = calloc<Uint32>();
     try {
-      final ok = kernel32.readFile(
-        _handle,
-        buffer,
-        max,
-        read,
-        nullptr,
-      );
+      final ok = kernel32.readFile(_handle, buffer, max, read, nullptr);
       if (ok == 0) {
         throw DiscordUnavailable(
           'reading from Discord failed (Win32 error ${kernel32.getLastError()})',
@@ -393,9 +386,7 @@ class _WindowsPipe implements DiscordTransport {
 /// The pipe names Discord tries, in order.
 List<String> discordPipeCandidates() {
   if (Platform.isWindows) {
-    return <String>[
-      for (var i = 0; i < 10; i++) '\\\\.\\pipe\\discord-ipc-$i',
-    ];
+    return <String>[for (var i = 0; i < 10; i++) '\\\\.\\pipe\\discord-ipc-$i'];
   }
   final base =
       Platform.environment['XDG_RUNTIME_DIR'] ??
@@ -413,9 +404,11 @@ List<String> discordPipeCandidates() {
 ///
 /// Windows is the only platform this is implemented for. The other two keep
 /// their endpoints in the candidate list so the failure message names the real
-/// reason — a unix domain socket, which is not something `dart:io` can dial — 
+/// reason — a unix domain socket, which is not something `dart:io` can dial —
 /// rather than pretending Discord is absent.
-Future<DiscordTransport> openDiscordTransport({List<String>? candidates}) async {
+Future<DiscordTransport> openDiscordTransport({
+  List<String>? candidates,
+}) async {
   if (!Platform.isWindows) {
     throw DiscordUnavailable(
       'Discord Rich Presence is implemented on Windows only so far: the '
@@ -453,10 +446,7 @@ Future<DiscordTransport> openDiscordTransport({List<String>? candidates}) async 
 
 /// One frame received from Discord.
 class DiscordMessage {
-  const DiscordMessage({
-    required this.opcode,
-    required this.payload,
-  });
+  const DiscordMessage({required this.opcode, required this.payload});
 
   final int opcode;
   final Map<String, Object?> payload;
@@ -552,9 +542,7 @@ class DiscordIpc implements DiscordConnection {
         if (!ready.isCompleted) ready.complete(message);
       } else if (message.event == 'ERROR') {
         if (!ready.isCompleted) {
-          ready.completeError(
-            DiscordUnavailable(_errorText(message)),
-          );
+          ready.completeError(DiscordUnavailable(_errorText(message)));
         }
       }
     });
@@ -670,7 +658,12 @@ class DiscordIpc implements DiscordConnection {
     } on DiscordUnavailable catch (e) {
       _fail(e);
     } catch (e, stack) {
-      AppLogger.instance.error('discord', 'IPC read failed', error: e, stackTrace: stack);
+      AppLogger.instance.error(
+        'discord',
+        'IPC read failed',
+        error: e,
+        stackTrace: stack,
+      );
       _fail(DiscordUnavailable('$e'));
     }
   }

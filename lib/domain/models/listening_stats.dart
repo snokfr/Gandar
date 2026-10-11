@@ -184,8 +184,7 @@ class ListeningStats {
     adSeconds: adSeconds ?? this.adSeconds,
     adsPerBreak: adsPerBreak ?? this.adsPerBreak,
     adsCpm: adsCpm ?? this.adsCpm,
-    artistPayoutPerStream:
-        artistPayoutPerStream ?? this.artistPayoutPerStream,
+    artistPayoutPerStream: artistPayoutPerStream ?? this.artistPayoutPerStream,
     tracksWithKnownDuration: tracksWithKnownDuration,
     dailyPlays: dailyPlays,
   );

@@ -131,7 +131,8 @@ class _TrackPickerSheetState extends ConsumerState<_TrackPickerSheet> {
                               ? context.gandarTokens.accentColor
                               : null,
                         ),
-                        onTap: () => _pick(track, already: already, theme: theme),
+                        onTap: () =>
+                            _pick(track, already: already, theme: theme),
                       );
                     },
                   ),

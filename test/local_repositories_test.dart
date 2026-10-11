@@ -301,21 +301,24 @@ void main() {
       expect((await repo.cachedLikedTracks()), hasLength(2));
     });
 
-    test('an imported playlist is deletable and its tracks survive too', () async {
-      final repo = DriftLibraryRepository(db);
-      await repo.upsertPlaylists([
-        const Playlist(id: 'spotify1', name: 'Imported', trackCount: 1),
-      ]);
-      await repo.upsertTracks([song('a')]);
-      await repo.replacePlaylistTracks('spotify1', [song('a')]);
+    test(
+      'an imported playlist is deletable and its tracks survive too',
+      () async {
+        final repo = DriftLibraryRepository(db);
+        await repo.upsertPlaylists([
+          const Playlist(id: 'spotify1', name: 'Imported', trackCount: 1),
+        ]);
+        await repo.upsertTracks([song('a')]);
+        await repo.replacePlaylistTracks('spotify1', [song('a')]);
 
-      await repo.deletePlaylist('spotify1');
+        await repo.deletePlaylist('spotify1');
 
-      expect(await repo.cachedPlaylists(), isEmpty);
-      expect(await repo.cachedLikedTracks(), hasLength(1));
-      // And it is not mistaken for one made here.
-      expect(Playlist.isLocalId('spotify1'), isFalse);
-    });
+        expect(await repo.cachedPlaylists(), isEmpty);
+        expect(await repo.cachedLikedTracks(), hasLength(1));
+        // And it is not mistaken for one made here.
+        expect(Playlist.isLocalId('spotify1'), isFalse);
+      },
+    );
 
     test('renaming ignores a blank name and keeps the old one', () async {
       final repo = DriftLibraryRepository(db);

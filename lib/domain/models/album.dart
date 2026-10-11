@@ -32,10 +32,8 @@ class Album {
   /// Total playing time of what is here, which is a floor rather than the
   /// album's real length: a library only ever holds the tracks that were
   /// imported.
-  Duration get duration => tracks.fold(
-    Duration.zero,
-    (sum, track) => sum + track.duration,
-  );
+  Duration get duration =>
+      tracks.fold(Duration.zero, (sum, track) => sum + track.duration);
 
   /// A key that survives a route: titles are not unique on their own. Two
   /// different records called "Greatest Hits" are still one shelf here, which is
@@ -63,7 +61,10 @@ class Album {
         tracks: List<Track>.unmodifiable(grouped),
         artworkUrl: grouped
             .map((t) => t.artworkUrl)
-            .firstWhere((url) => url != null && url.isNotEmpty, orElse: () => null),
+            .firstWhere(
+              (url) => url != null && url.isNotEmpty,
+              orElse: () => null,
+            ),
       );
     }).toList();
 

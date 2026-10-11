@@ -104,7 +104,8 @@ void main() {
       expect(
         names,
         <String>['VISIONOS', 'ANDROID', 'IOS', 'TVHTML5'],
-        reason: 'the others are what is left if YouTube stops serving the one '
+        reason:
+            'the others are what is left if YouTube stops serving the one '
             'that is measured to work today',
       );
       expect(
@@ -120,7 +121,8 @@ void main() {
       expect(
         resolver.attemptsPerClient,
         greaterThan(1),
-        reason: 'the same client both served and refused a full file within one '
+        reason:
+            'the same client both served and refused a full file within one '
             'afternoon, so one refusal must not condemn it',
       );
     });

@@ -78,11 +78,8 @@ class FakeLibrary implements LibraryRepository {
   Future<List<Track>> cachedPlaylistTracks(String playlistId) async => const [];
 
   @override
-  Future<Playlist> createPlaylist(String name) async => Playlist(
-    id: '${Playlist.localPrefix}0',
-    name: name,
-    isLocal: true,
-  );
+  Future<Playlist> createPlaylist(String name) async =>
+      Playlist(id: '${Playlist.localPrefix}0', name: name, isLocal: true);
 
   @override
   Future<void> renamePlaylist(String playlistId, String name) async {}

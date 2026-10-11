@@ -173,9 +173,7 @@ Future<void> deletePlaylist(
       SnackBar(content: Text('Deleted "${playlist.name}".')),
     );
   } catch (e) {
-    messenger.showSnackBar(
-      SnackBar(content: Text('Could not delete it: $e')),
-    );
+    messenger.showSnackBar(SnackBar(content: Text('Could not delete it: $e')));
   }
 }
 
@@ -339,8 +337,7 @@ class PlaylistDetailPage extends ConsumerWidget {
                           OutlinedButton.icon(
                             onPressed: () => showTrackPicker(
                               context,
-                              title:
-                                  'Add to "${playlist?.name ?? 'playlist'}"',
+                              title: 'Add to "${playlist?.name ?? 'playlist'}"',
                               alreadyPicked: <String>{
                                 for (final track in tracks) track.id,
                               },
@@ -420,4 +417,3 @@ class PlaylistDetailPage extends ConsumerWidget {
     );
   }
 }
-

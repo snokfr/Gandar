@@ -40,16 +40,12 @@ GoRouter buildRouter() {
             routes: <RouteBase>[
               GoRoute(
                 path: ':id',
-                builder: (context, state) => AlbumDetailPage(
-                  albumId: state.pathParameters['id']!,
-                ),
+                builder: (context, state) =>
+                    AlbumDetailPage(albumId: state.pathParameters['id']!),
               ),
             ],
           ),
-          GoRoute(
-            path: '/feed',
-            builder: (context, state) => const FeedPage(),
-          ),
+          GoRoute(path: '/feed', builder: (context, state) => const FeedPage()),
           GoRoute(
             path: '/mashup',
             builder: (context, state) => const MashupPage(),

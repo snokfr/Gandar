@@ -290,9 +290,7 @@ final topArtistsProvider = FutureProvider<List<String>>((ref) async {
 
 /// One service for the session, so the artist -> channel lookups it discovers
 /// are reused instead of being re-searched every time the tab is opened.
-final artistFeedServiceProvider = Provider<ArtistFeed>(
-  (ref) => ArtistFeed(),
-);
+final artistFeedServiceProvider = Provider<ArtistFeed>((ref) => ArtistFeed());
 
 /// The newest uploads from the artists this library listens to.
 final artistFeedProvider = FutureProvider<List<FeedVideo>>((ref) async {
@@ -598,7 +596,8 @@ final appUsageTrackerProvider = Provider<AppUsageTracker>(
 typedef DiscordConnector = Future<DiscordConnection> Function(String clientId);
 
 final discordConnectorProvider = Provider<DiscordConnector>(
-  (ref) => (clientId) => DiscordIpc.connect(clientId: clientId),
+  (ref) =>
+      (clientId) => DiscordIpc.connect(clientId: clientId),
 );
 
 /// What the Discord connection is doing, for the settings screen to report.
@@ -766,7 +765,10 @@ class DiscordPresenceController extends Notifier<DiscordState> {
       isPlaying: playback.isPlaying,
       position: playback.position,
       duration: playback.duration,
-      lifetime: ref.read(appUsageTrackerProvider).usage.lifetimeIncludingSession,
+      lifetime: ref
+          .read(appUsageTrackerProvider)
+          .usage
+          .lifetimeIncludingSession,
     );
 
     try {

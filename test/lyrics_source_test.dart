@@ -27,8 +27,10 @@ void main() {
 
     test('a payload with neither kind of lyric is "no lyrics"', () {
       expect(
-        Lyrics.fromJson('{"plainLyrics":null,"syncedLyrics":null,'
-            '"instrumental":false}'),
+        Lyrics.fromJson(
+          '{"plainLyrics":null,"syncedLyrics":null,'
+          '"instrumental":false}',
+        ),
         isNull,
       );
     });
@@ -43,11 +45,14 @@ void main() {
       expect(lyrics.isEmpty, isTrue);
     });
 
-    test('anything that is not a matching JSON object is null, not a throw', () {
-      expect(Lyrics.fromJson('<html>blocked'), isNull);
-      expect(Lyrics.fromJson('[]'), isNull);
-      expect(Lyrics.fromJson('123'), isNull);
-    });
+    test(
+      'anything that is not a matching JSON object is null, not a throw',
+      () {
+        expect(Lyrics.fromJson('<html>blocked'), isNull);
+        expect(Lyrics.fromJson('[]'), isNull);
+        expect(Lyrics.fromJson('123'), isNull);
+      },
+    );
 
     test('LRC metadata tags are not mistaken for words', () {
       const lrc = '[ar:An Artist]\n[ti:A Title]\n[00:01.00] real words\n';

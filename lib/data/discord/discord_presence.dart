@@ -102,9 +102,7 @@ class DiscordPresence {
           )
         : null;
 
-    final largeText = hasTrack
-        ? _clip(track.album ?? 'Gandar', 128)
-        : 'Gandar';
+    final largeText = hasTrack ? _clip(track.album ?? 'Gandar', 128) : 'Gandar';
 
     final smallText = showAppTime && lifetime.inMinutes >= 1
         ? _clip('${describeDuration(lifetime)} in Gandar', 128)
@@ -116,7 +114,8 @@ class DiscordPresence {
       'assets': <String, Object?>{
         'large_image': appAsset,
         'large_text': largeText,
-        if (isPlaying || hasTrack) 'small_image': isPlaying ? playingAsset : pausedAsset,
+        if (isPlaying || hasTrack)
+          'small_image': isPlaying ? playingAsset : pausedAsset,
         'small_text': ?smallText,
       },
     };
@@ -147,9 +146,7 @@ class DiscordPresence {
     final start = now.subtract(position);
     final timestamps = <String, Object?>{'start': start.millisecondsSinceEpoch};
     if (duration > Duration.zero) {
-      timestamps['end'] = start
-          .add(duration)
-          .millisecondsSinceEpoch;
+      timestamps['end'] = start.add(duration).millisecondsSinceEpoch;
     }
     return timestamps;
   }

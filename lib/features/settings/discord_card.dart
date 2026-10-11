@@ -42,9 +42,9 @@ class _DiscordCardState extends ConsumerState<DiscordCard> {
 
   Future<void> _saveClientId(String value) async {
     final settings = ref.read(playbackSettingsProvider);
-    await ref.read(playbackSettingsProvider.notifier).update(
-      settings.copyWith(discordClientId: value),
-    );
+    await ref
+        .read(playbackSettingsProvider.notifier)
+        .update(settings.copyWith(discordClientId: value));
   }
 
   @override
@@ -98,9 +98,8 @@ class _DiscordCardState extends ConsumerState<DiscordCard> {
                 ? 'Updates your Discord profile while Gandar is open.'
                 : 'Has no effect on this platform yet.',
             value: settings.discordEnabled,
-            onChanged: (v) => notifier.update(
-              settings.copyWith(discordEnabled: v),
-            ),
+            onChanged: (v) =>
+                notifier.update(settings.copyWith(discordEnabled: v)),
           ),
 
           const SizedBox(height: 4),

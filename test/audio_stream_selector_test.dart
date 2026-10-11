@@ -41,15 +41,12 @@ void main() {
 
   group('best', () {
     test('ignores the container and takes the highest bitrate', () {
-      final best = selector.selectBest(
-        <AudioOption>[
-          _option('m4a', bitrate: 128000, container: 'mp4'),
-          // Opus streams routinely beat the m4a ones, which is exactly what
-          // "best" is for.
-          _option('opus', bitrate: 160000, container: 'webm'),
-        ],
-        quality: AudioQuality.best,
-      );
+      final best = selector.selectBest(<AudioOption>[
+        _option('m4a', bitrate: 128000, container: 'mp4'),
+        // Opus streams routinely beat the m4a ones, which is exactly what
+        // "best" is for.
+        _option('opus', bitrate: 160000, container: 'webm'),
+      ], quality: AudioQuality.best);
 
       expect(best!.url, 'opus');
     });
@@ -57,14 +54,11 @@ void main() {
 
   group('data saver', () {
     test('takes the smallest stream that is still music', () {
-      final best = selector.selectBest(
-        <AudioOption>[
-          _option('big', bitrate: 160000),
-          _option('small', bitrate: 70000),
-          _option('tiny', bitrate: 48000),
-        ],
-        quality: AudioQuality.dataSaver,
-      );
+      final best = selector.selectBest(<AudioOption>[
+        _option('big', bitrate: 160000),
+        _option('small', bitrate: 70000),
+        _option('tiny', bitrate: 48000),
+      ], quality: AudioQuality.dataSaver);
 
       // 48 kbps is below the floor, so the 70 kbps stream wins rather than the
       // smallest one available.
@@ -72,25 +66,22 @@ void main() {
     });
 
     test('when everything is below the floor, the best of them wins', () {
-      final best = selector.selectBest(
-        <AudioOption>[
-          _option('worst', bitrate: 24000),
-          _option('least bad', bitrate: 48000),
-        ],
-        quality: AudioQuality.dataSaver,
-      );
+      final best = selector.selectBest(<AudioOption>[
+        _option('worst', bitrate: 24000),
+        _option('least bad', bitrate: 48000),
+      ], quality: AudioQuality.dataSaver);
 
       expect(best!.url, 'least bad');
     });
 
     test('a stream exactly at the floor is acceptable', () {
-      final best = selector.selectBest(
-        <AudioOption>[
-          _option('at floor', bitrate: AudioStreamSelector.minimumDataSaverBitrate),
-          _option('above', bitrate: 128000),
-        ],
-        quality: AudioQuality.dataSaver,
-      );
+      final best = selector.selectBest(<AudioOption>[
+        _option(
+          'at floor',
+          bitrate: AudioStreamSelector.minimumDataSaverBitrate,
+        ),
+        _option('above', bitrate: 128000),
+      ], quality: AudioQuality.dataSaver);
 
       expect(best!.url, 'at floor');
     });
@@ -99,13 +90,10 @@ void main() {
   group('rules that hold at every quality', () {
     for (final quality in AudioQuality.values) {
       test('a live stream is never chosen ($quality)', () {
-        final best = selector.selectBest(
-          <AudioOption>[
-            _option('live', bitrate: 500000, live: true),
-            _option('normal', bitrate: 64000),
-          ],
-          quality: quality,
-        );
+        final best = selector.selectBest(<AudioOption>[
+          _option('live', bitrate: 500000, live: true),
+          _option('normal', bitrate: 64000),
+        ], quality: quality);
 
         expect(best!.url, 'normal');
       });
@@ -118,10 +106,9 @@ void main() {
         // Every level agrees on this: a live stream is never *preferred*, but
         // when it is the only thing the video publishes, it is still played.
         // The alternative would be a silent failure that depends on a setting.
-        final best = selector.selectBest(
-          <AudioOption>[_option('live', bitrate: 128000, live: true)],
-          quality: quality,
-        );
+        final best = selector.selectBest(<AudioOption>[
+          _option('live', bitrate: 128000, live: true),
+        ], quality: quality);
         expect(best!.url, 'live');
       });
     }

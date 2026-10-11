@@ -255,9 +255,7 @@ class _MashupPageState extends ConsumerState<MashupPage> {
                       children: [
                         IconButton(
                           tooltip: 'Move up',
-                          onPressed: index == 0
-                              ? null
-                              : () => _move(index, -1),
+                          onPressed: index == 0 ? null : () => _move(index, -1),
                           icon: const Icon(Icons.keyboard_arrow_up),
                         ),
                         IconButton(

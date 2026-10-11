@@ -134,9 +134,8 @@ class LibraryPage extends ConsumerWidget {
     );
   }
 
-  static List<Track> _matching(List<Track> tracks, String search) => tracks
-      .where((track) => _matches(track, search))
-      .toList(growable: false);
+  static List<Track> _matching(List<Track> tracks, String search) =>
+      tracks.where((track) => _matches(track, search)).toList(growable: false);
 
   static bool _matches(Track track, String search) =>
       track.title.toLowerCase().contains(search) ||

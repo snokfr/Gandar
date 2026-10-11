@@ -26,7 +26,8 @@ class EqualizerCard extends ConsumerWidget {
         children: [
           SettingSwitchTile(
             title: 'Equalizer',
-            description: 'Shape the sound with a 10-band equalizer and presets.',
+            description:
+                'Shape the sound with a 10-band equalizer and presets.',
             value: settings.eqEnabled,
             onChanged: (value) =>
                 notifier.update(settings.copyWith(eqEnabled: value)),
@@ -46,9 +47,8 @@ class EqualizerCard extends ConsumerWidget {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    initialValue: _presetIds(
-                      settings,
-                    ).contains(settings.eqPreset)
+                    initialValue:
+                        _presetIds(settings).contains(settings.eqPreset)
                         ? settings.eqPreset
                         : 'custom',
                     decoration: const InputDecoration(labelText: 'Preset'),
@@ -99,7 +99,16 @@ class EqualizerCard extends ConsumerWidget {
                     settings.copyWith(
                       eqPreset: 'flat',
                       eqBands: const EqPreset('flat', 'Flat', <double>[
-                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
                       ]).apply(),
                     ),
                   ),
@@ -118,8 +127,7 @@ class EqualizerCard extends ConsumerWidget {
                     ref,
                     settings: settings,
                     suggestedName:
-                        selectedCustom?.name ??
-                        _currentPresetLabel(settings),
+                        selectedCustom?.name ?? _currentPresetLabel(settings),
                   ),
                   icon: const Icon(Icons.bookmark_add_outlined),
                   label: const Text('Save as preset'),
@@ -198,9 +206,7 @@ Future<void> _savePreset(
   final existing = settings.customEqPresets
       .where((p) => p.name.toLowerCase() == name.toLowerCase())
       .firstOrNull;
-  final id =
-      existing?.id ??
-      'custom-${DateTime.now().microsecondsSinceEpoch}';
+  final id = existing?.id ?? 'custom-${DateTime.now().microsecondsSinceEpoch}';
   final preset = CustomEqPreset(
     id: id,
     name: name,
@@ -211,17 +217,11 @@ Future<void> _savePreset(
     ...settings.customEqPresets.where((p) => p.id != id),
     preset,
   ];
-  await notifier.update(
-    settings.copyWith(customEqPresets: next, eqPreset: id),
-  );
+  await notifier.update(settings.copyWith(customEqPresets: next, eqPreset: id));
   if (!context.mounted) return;
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
-      content: Text(
-        existing == null
-            ? 'Saved "$name".'
-            : 'Updated "$name".',
-      ),
+      content: Text(existing == null ? 'Saved "$name".' : 'Updated "$name".'),
     ),
   );
 }
@@ -245,7 +245,6 @@ Future<void> _deletePreset(
     ),
   );
   if (!context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text('Deleted "${preset.name}".')),
-  );
+  ScaffoldMessenger.of(context)
+      .showSnackBar(SnackBar(content: Text('Deleted "${preset.name}".')));
 }

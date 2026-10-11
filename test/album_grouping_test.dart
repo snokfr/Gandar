@@ -43,7 +43,8 @@ void main() {
       expect(
         albums.single.artist,
         'The Band',
-        reason: 'a record with guests should not be renamed by whichever track '
+        reason:
+            'a record with guests should not be renamed by whichever track '
             'happens to come first',
       );
     });
@@ -68,7 +69,8 @@ void main() {
       expect(
         albums.single.tracks.map((t) => t.title),
         <String>['One'],
-        reason: 'an import without album names should not produce an album '
+        reason:
+            'an import without album names should not produce an album '
             'called Unknown',
       );
     });
@@ -105,9 +107,9 @@ void main() {
       ];
 
       final forwards = Album.group(tracks).map((a) => a.id).toList();
-      final backwards = Album.group(
-        tracks.reversed.toList(growable: false),
-      ).map((a) => a.id).toList();
+      final backwards = Album.group(tracks.reversed.toList(growable: false))
+          .map((a) => a.id)
+          .toList();
 
       expect(forwards, backwards);
     });

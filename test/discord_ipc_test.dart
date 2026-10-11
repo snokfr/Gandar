@@ -15,10 +15,10 @@ Track _track({
 void main() {
   group('frame codec', () {
     test('writes an 8-byte little-endian header before the JSON', () {
-      final frame = encodeDiscordFrame(DiscordOpcode.handshake, <String, Object?>{
-        'v': 1,
-        'client_id': '123',
-      });
+      final frame = encodeDiscordFrame(
+        DiscordOpcode.handshake,
+        <String, Object?>{'v': 1, 'client_id': '123'},
+      );
 
       final view = ByteData.view(frame.buffer);
       expect(view.getUint32(0, Endian.little), DiscordOpcode.handshake);
@@ -114,29 +114,34 @@ void main() {
       // The timer is anchored to when the track started, so Discord's own clock
       // lines up with ours without another message.
       final stamps = activity['timestamps']! as Map;
-      expect(stamps['start'], now.subtract(const Duration(minutes: 1)).millisecondsSinceEpoch);
+      expect(
+        stamps['start'],
+        now.subtract(const Duration(minutes: 1)).millisecondsSinceEpoch,
+      );
       expect(
         stamps['end'],
         now.add(const Duration(minutes: 2, seconds: 30)).millisecondsSinceEpoch,
       );
     });
 
-    test('a paused track shows no timer, because Discord would keep counting',
-        () {
-      final activity = DiscordPresence.build(
-        enabled: true,
-        showTrack: true,
-        showAppTime: false,
-        track: _track(),
-        isPlaying: false,
-        position: const Duration(minutes: 1),
-        duration: const Duration(minutes: 3),
-        now: now,
-      )!;
-      expect(activity.containsKey('timestamps'), isFalse);
-      final assets = activity['assets']! as Map;
-      expect(assets['small_image'], DiscordPresence.pausedAsset);
-    });
+    test(
+      'a paused track shows no timer, because Discord would keep counting',
+      () {
+        final activity = DiscordPresence.build(
+          enabled: true,
+          showTrack: true,
+          showAppTime: false,
+          track: _track(),
+          isPlaying: false,
+          position: const Duration(minutes: 1),
+          duration: const Duration(minutes: 3),
+          now: now,
+        )!;
+        expect(activity.containsKey('timestamps'), isFalse);
+        final assets = activity['assets']! as Map;
+        expect(assets['small_image'], DiscordPresence.pausedAsset);
+      },
+    );
 
     test('hiding the track keeps the profile anonymous', () {
       final activity = DiscordPresence.build(
@@ -169,7 +174,10 @@ void main() {
       expect(smallTextFor(const Duration(seconds: 30)), isNull);
       expect(smallTextFor(const Duration(minutes: 5)), '5 min in Gandar');
       expect(smallTextFor(const Duration(hours: 2)), '2 h in Gandar');
-      expect(smallTextFor(const Duration(hours: 2, minutes: 5)), '2 h 5 m in Gandar');
+      expect(
+        smallTextFor(const Duration(hours: 2, minutes: 5)),
+        '2 h 5 m in Gandar',
+      );
     });
 
     test('several artists are joined, and a missing album falls back', () {
@@ -201,8 +209,14 @@ void main() {
     });
 
     test('describeDuration covers the three shapes the profile shows', () {
-      expect(DiscordPresence.describeDuration(const Duration(seconds: 42)), '42 s');
-      expect(DiscordPresence.describeDuration(const Duration(minutes: 42)), '42 min');
+      expect(
+        DiscordPresence.describeDuration(const Duration(seconds: 42)),
+        '42 s',
+      );
+      expect(
+        DiscordPresence.describeDuration(const Duration(minutes: 42)),
+        '42 min',
+      );
       expect(
         DiscordPresence.describeDuration(const Duration(hours: 4, minutes: 7)),
         '4 h 7 m',

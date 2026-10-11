@@ -93,7 +93,8 @@ class AppDirectory {
           : '${candidate.path} (fell back past ${skipped.join(', ')})';
       return candidate;
     }
-    lastChoice = 'nothing was writable; using ${Directory.systemTemp.path}, '
+    lastChoice =
+        'nothing was writable; using ${Directory.systemTemp.path}, '
         'which this machine may refuse';
     return Directory.systemTemp;
   }

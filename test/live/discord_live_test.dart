@@ -88,11 +88,17 @@ void main() {
       await client.setActivity(null);
       await Future<void>.delayed(const Duration(seconds: 2));
 
-      expect(client.isOpen, isTrue, reason: 'Discord should still be connected');
+      expect(
+        client.isOpen,
+        isTrue,
+        reason: 'Discord should still be connected',
+      );
       // ignore: avoid_print
       print('LIVE: frames from Discord: ${seen.join(', ')}');
     },
-    skip: _live ? false : 'needs a running Discord client; run with --dart-define=LIVE=true',
+    skip: _live
+        ? false
+        : 'needs a running Discord client; run with --dart-define=LIVE=true',
     timeout: const Timeout(Duration(minutes: 2)),
   );
 }

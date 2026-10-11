@@ -54,15 +54,18 @@ void main() {
       expect(tracker.usage.lifetimeIncludingSession, const Duration(hours: 1));
     });
 
-    test('a nonsense stored value reads as zero rather than throwing', () async {
-      final tracker = AppUsageTracker(
-        store: InMemoryStore(<String, String>{
-          AppUsageTracker.storageKey: 'not a number',
-        }),
-      );
-      await tracker.load();
-      expect(tracker.usage.lifetime, Duration.zero);
-    });
+    test(
+      'a nonsense stored value reads as zero rather than throwing',
+      () async {
+        final tracker = AppUsageTracker(
+          store: InMemoryStore(<String, String>{
+            AppUsageTracker.storageKey: 'not a number',
+          }),
+        );
+        await tracker.load();
+        expect(tracker.usage.lifetime, Duration.zero);
+      },
+    );
 
     test('a negative stored value is clamped, not subtracted', () async {
       final tracker = AppUsageTracker(
@@ -88,7 +91,10 @@ void main() {
       // Nothing has been written yet, so the stored total is still zero and the
       // running total is exactly the session.
       expect(tracker.usage.lifetime, Duration.zero);
-      expect(tracker.usage.lifetimeIncludingSession, const Duration(seconds: 60));
+      expect(
+        tracker.usage.lifetimeIncludingSession,
+        const Duration(seconds: 60),
+      );
       tracker.dispose();
     });
 
@@ -96,7 +102,10 @@ void main() {
       // Sleep for eight hours, wake up, tick once: the wall clock moved but the
       // app was not open, so only one tick's worth may be counted.
       final clock = FakeClock(DateTime(2026, 10, 11, 22));
-      final tracker = AppUsageTracker(store: InMemoryStore(), clock: clock.call);
+      final tracker = AppUsageTracker(
+        store: InMemoryStore(),
+        clock: clock.call,
+      );
       tracker.start(tick: const Duration(hours: 1));
 
       clock.advance(const Duration(hours: 8));
@@ -125,7 +134,10 @@ void main() {
       expect(tracker.usage.session, const Duration(minutes: 10));
       // The session is not dropped after being folded in: the number on screen
       // is "this run", and it keeps growing.
-      expect(tracker.usage.lifetimeIncludingSession, const Duration(minutes: 20));
+      expect(
+        tracker.usage.lifetimeIncludingSession,
+        const Duration(minutes: 20),
+      );
       tracker.dispose();
     });
 

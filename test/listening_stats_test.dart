@@ -45,14 +45,11 @@ void main() {
 
     test('adds up listening time, distinct tracks and known durations', () {
       final start = DateTime(2026, 3, 1, 10);
-      final stats = _stats(
-        [
-          _play('a', start, ms: 180000),
-          _play('b', start.add(const Duration(minutes: 4)), ms: 200000),
-          _play('a', start.add(const Duration(minutes: 9)), ms: 180000),
-        ],
-        now: start,
-      );
+      final stats = _stats([
+        _play('a', start, ms: 180000),
+        _play('b', start.add(const Duration(minutes: 4)), ms: 200000),
+        _play('a', start.add(const Duration(minutes: 9)), ms: 180000),
+      ], now: start);
 
       expect(stats.totalPlays, 3);
       expect(stats.distinctTracks, 2);
@@ -86,13 +83,10 @@ void main() {
 
     test('ad time and ad money come from the breaks, not the plays', () {
       final start = DateTime(2026, 3, 1, 10);
-      final stats = _stats(
-        [
-          for (var i = 0; i < 3; i++)
-            _play('t$i', start.add(Duration(minutes: 5 * i)), ms: 200000),
-        ],
-        now: start,
-      );
+      final stats = _stats([
+        for (var i = 0; i < 3; i++)
+          _play('t$i', start.add(Duration(minutes: 5 * i)), ms: 200000),
+      ], now: start);
 
       // 10 minutes at a break every 10 minutes is exactly one break.
       expect(stats.listeningTime, const Duration(minutes: 10));
@@ -105,11 +99,8 @@ void main() {
     });
 
     test('the per-hour figure is the published CPM arithmetic', () {
-      final stats = _stats(const []) .withAssumptions(
-        adBreakMinutes: 12,
-        adsPerBreak: 1,
-        adsCpm: 20,
-      );
+      final stats = _stats(const [])
+          .withAssumptions(adBreakMinutes: 12, adsPerBreak: 1, adsCpm: 20);
 
       // Five breaks an hour at $0.02 an impression: $0.10 an hour, which sits
       // inside the $0.06-$0.15 an hour a 4-6 breaks/hour observation implies.
@@ -121,9 +112,7 @@ void main() {
 
     test('more ads per break costs more ad time', () {
       final start = DateTime(2026, 3, 1, 10);
-      final records = <PlayRecord>[
-        _play('a', start, ms: 600000),
-      ];
+      final records = <PlayRecord>[_play('a', start, ms: 600000)];
 
       final one = _stats(records, now: start, adsPerBreak: 1);
       final three = _stats(records, now: start, adsPerBreak: 3);
@@ -159,13 +148,10 @@ void main() {
 
     test('artist payouts are the estimate times the plays', () {
       final start = DateTime(2026, 3, 1, 10);
-      final stats = _stats(
-        [
-          _play('a', start),
-          _play('b', start.add(const Duration(minutes: 1))),
-        ],
-        now: start,
-      );
+      final stats = _stats([
+        _play('a', start),
+        _play('b', start.add(const Duration(minutes: 1))),
+      ], now: start);
 
       expect(stats.artistPayoutEquivalent, closeTo(0.008, 1e-9));
     });
@@ -185,14 +171,11 @@ void main() {
 
     test('the daily window is zero-filled and ends today', () {
       final now = DateTime(2026, 3, 14, 12);
-      final stats = _stats(
-        [
-          _play('a', DateTime(2026, 3, 14, 9)),
-          _play('b', DateTime(2026, 3, 14, 10)),
-          _play('c', DateTime(2026, 3, 11, 10)),
-        ],
-        now: now,
-      );
+      final stats = _stats([
+        _play('a', DateTime(2026, 3, 14, 9)),
+        _play('b', DateTime(2026, 3, 14, 10)),
+        _play('c', DateTime(2026, 3, 11, 10)),
+      ], now: now);
 
       expect(stats.dailyPlays, hasLength(14));
       expect(stats.dailyPlays.last.plays, 2);
@@ -210,7 +193,10 @@ void main() {
 
       expect(changed.listeningTime, original.listeningTime);
       expect(changed.totalPlays, original.totalPlays);
-      expect(changed.adEarningsAvoided, closeTo(original.adEarningsAvoided * 2, 1e-9));
+      expect(
+        changed.adEarningsAvoided,
+        closeTo(original.adEarningsAvoided * 2, 1e-9),
+      );
     });
 
     test('a corrupt saved payload does not crash the card', () {

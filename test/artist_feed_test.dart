@@ -89,13 +89,14 @@ void main() {
   });
 
   group('merging per-artist feeds', () {
-    FeedVideo video(String id, {DateTime? at, String artist = 'A'}) => FeedVideo(
-      videoId: id,
-      title: 'Title $id',
-      channelTitle: 'Channel $artist',
-      publishedAt: at,
-      artist: artist,
-    );
+    FeedVideo video(String id, {DateTime? at, String artist = 'A'}) =>
+        FeedVideo(
+          videoId: id,
+          title: 'Title $id',
+          channelTitle: 'Channel $artist',
+          publishedAt: at,
+          artist: artist,
+        );
 
     test('is newest first across every artist', () {
       final merged = ArtistFeed.merge(<List<FeedVideo>>[
@@ -106,10 +107,11 @@ void main() {
         <FeedVideo>[video('middle', at: DateTime(2026, 3, 1), artist: 'B')],
       ]);
 
-      expect(
-        merged.map((v) => v.videoId).toList(),
-        <String>['new', 'middle', 'old'],
-      );
+      expect(merged.map((v) => v.videoId).toList(), <String>[
+        'new',
+        'middle',
+        'old',
+      ]);
     });
 
     test('the same video posted under two names appears once', () {
@@ -126,7 +128,10 @@ void main() {
         <FeedVideo>[video('undated'), video('dated', at: DateTime(2026, 1, 1))],
       ]);
 
-      expect(merged.map((v) => v.videoId).toList(), <String>['dated', 'undated']);
+      expect(merged.map((v) => v.videoId).toList(), <String>[
+        'dated',
+        'undated',
+      ]);
     });
 
     test('an empty merge is empty, and does not throw', () {

@@ -70,11 +70,12 @@ class CustomEqPreset {
   /// Gain in dB per band, in [PlaybackSettings.defaultBands] order.
   final List<double> gains;
 
-  CustomEqPreset copyWith({String? name, List<double>? gains}) => CustomEqPreset(
-    id: id,
-    name: name ?? this.name,
-    gains: gains ?? this.gains,
-  );
+  CustomEqPreset copyWith({String? name, List<double>? gains}) =>
+      CustomEqPreset(
+        id: id,
+        name: name ?? this.name,
+        gains: gains ?? this.gains,
+      );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'id': id,
@@ -286,8 +287,10 @@ class PlaybackSettings {
       savingsAdSeconds: savingsAdSeconds.clamp(0.0, 600.0),
       savingsAdsPerBreak: savingsAdsPerBreak.clamp(0.0, 10.0),
       savingsAdsCpm: savingsAdsCpm.clamp(0.0, 200.0),
-      savingsArtistPayoutPerStream:
-          savingsArtistPayoutPerStream.clamp(0.0, 1.0),
+      savingsArtistPayoutPerStream: savingsArtistPayoutPerStream.clamp(
+        0.0,
+        1.0,
+      ),
       // A pasted id arrives with whatever whitespace the clipboard held, and a
       // trailing space is the difference between a working handshake and a
       // silent one. Whether the id is *valid* is Discord's business; the app
@@ -318,9 +321,7 @@ class PlaybackSettings {
       out.add(
         CustomEqPreset(
           id: preset.id,
-          name: preset.name.trim().isEmpty
-              ? 'Custom'
-              : preset.name.trim(),
+          name: preset.name.trim().isEmpty ? 'Custom' : preset.name.trim(),
           gains: gains,
         ),
       );
@@ -442,8 +443,7 @@ class PlaybackSettings {
           other.savingsAdSeconds == savingsAdSeconds &&
           other.savingsAdsPerBreak == savingsAdsPerBreak &&
           other.savingsAdsCpm == savingsAdsCpm &&
-          other.savingsArtistPayoutPerStream ==
-              savingsArtistPayoutPerStream &&
+          other.savingsArtistPayoutPerStream == savingsArtistPayoutPerStream &&
           other.discordEnabled == discordEnabled &&
           other.discordClientId == discordClientId &&
           other.discordShowTrack == discordShowTrack &&

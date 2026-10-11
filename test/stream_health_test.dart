@@ -34,7 +34,10 @@ class _FakeVideoServer {
       if (status == 0) return; // Hang: never answer, for the timeout case.
       request.response.statusCode = status;
       if (status == 206 || status == 200) {
-        request.response.headers.set(HttpHeaders.contentTypeHeader, 'audio/mp4');
+        request.response.headers.set(
+          HttpHeaders.contentTypeHeader,
+          'audio/mp4',
+        );
         request.response.add(List<int>.filled(1024, 0));
       }
       await request.response.close();
@@ -61,7 +64,8 @@ void main() {
       expect(
         server.ranges.single,
         'bytes=$oneMegabyte-${oneMegabyte + 1023}',
-        reason: 'a range inside the first megabyte is served even by a URL '
+        reason:
+            'a range inside the first megabyte is served even by a URL '
             'YouTube is not really serving, so it proves nothing',
       );
     });
@@ -74,16 +78,19 @@ void main() {
       expect(await const StreamHealth().check(url), StreamVerdict.serves);
     });
 
-    test('the first-megabyte-only URL YouTube hands out is a refusal', () async {
-      // What android and ios URLs really do: fine up to one megabyte, 403 after.
-      final server = _FakeVideoServer(
-        (start, _) => (start ?? 0) < oneMegabyte ? 206 : 403,
-      );
-      final url = await server.start();
-      addTearDown(server.stop);
+    test(
+      'the first-megabyte-only URL YouTube hands out is a refusal',
+      () async {
+        // What android and ios URLs really do: fine up to one megabyte, 403 after.
+        final server = _FakeVideoServer(
+          (start, _) => (start ?? 0) < oneMegabyte ? 206 : 403,
+        );
+        final url = await server.start();
+        addTearDown(server.stop);
 
-      expect(await const StreamHealth().check(url), StreamVerdict.refused);
-    });
+        expect(await const StreamHealth().check(url), StreamVerdict.refused);
+      },
+    );
 
     test('a file shorter than the probe offset is servable', () async {
       // 416 means the whole file is inside the window we can reach.
@@ -102,7 +109,8 @@ void main() {
       expect(
         await const StreamHealth().check(url),
         StreamVerdict.unknown,
-        reason: 'marking a client dead because of a bad moment would throw '
+        reason:
+            'marking a client dead because of a bad moment would throw '
             'away the only thing that works',
       );
     });

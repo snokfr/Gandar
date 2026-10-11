@@ -39,7 +39,7 @@ Future<void> configureMacWindowChrome() async {
     AppLogger.instance.warn(
       'window',
       'could not reach the window manager; the runner\'s window is still '
-      'there, so the app works — the minimum size and focus are what is lost',
+          'there, so the app works — the minimum size and focus are what is lost',
       error: e,
     );
     return;
@@ -65,7 +65,7 @@ Future<void> _applyWindowOptions() async {
     AppLogger.instance.warn(
       'window',
       'could not apply the window options; leaving the window as the runner '
-      'created it',
+          'created it',
       error: e,
     );
   }

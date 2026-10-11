@@ -114,14 +114,8 @@ class ThemeEditor extends ConsumerWidget {
               const SizedBox(width: 12),
               SegmentedButton<Brightness>(
                 segments: const [
-                  ButtonSegment(
-                    value: Brightness.dark,
-                    label: Text('Dark'),
-                  ),
-                  ButtonSegment(
-                    value: Brightness.light,
-                    label: Text('Light'),
-                  ),
+                  ButtonSegment(value: Brightness.dark, label: Text('Dark')),
+                  ButtonSegment(value: Brightness.light, label: Text('Light')),
                 ],
                 selected: {active.brightness},
                 onSelectionChanged: (selection) => _apply(
@@ -173,9 +167,8 @@ class ThemeEditor extends ConsumerWidget {
     );
     await ref.read(themeProvider.notifier).importTheme(saved);
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Saved "$name".')),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Saved "$name".')));
   }
 }
 
@@ -271,10 +264,26 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
   /// Swatches worth one tap. Not a full palette: these are the colours that
   /// suit a dark music player, which is what this editor is for.
   static const List<int> _swatches = <int>[
-    0xFF000000, 0xFF121212, 0xFF181818, 0xFF282828, 0xFF3C3C3C,
-    0xFFFFFFFF, 0xFFF3E9DE, 0xFFB3B3B3, 0xFF8A8A8A, 0xFF5A5A5A,
-    0xFF1DB954, 0xFF1ED760, 0xFF14B8A6, 0xFF2D7FF9, 0xFF7C4DFF,
-    0xFFC8763C, 0xFF8C4A2F, 0xFFE5484D, 0xFFF2B705, 0xFFB9A38E,
+    0xFF000000,
+    0xFF121212,
+    0xFF181818,
+    0xFF282828,
+    0xFF3C3C3C,
+    0xFFFFFFFF,
+    0xFFF3E9DE,
+    0xFFB3B3B3,
+    0xFF8A8A8A,
+    0xFF5A5A5A,
+    0xFF1DB954,
+    0xFF1ED760,
+    0xFF14B8A6,
+    0xFF2D7FF9,
+    0xFF7C4DFF,
+    0xFFC8763C,
+    0xFF8C4A2F,
+    0xFFE5484D,
+    0xFFF2B705,
+    0xFFB9A38E,
   ];
 
   @override
@@ -379,24 +388,36 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
               label: 'Red',
               value: (color.r * 255).round(),
               onChanged: (v) => _set(
-                Color.fromARGB(255, v, (color.g * 255).round(), (color.b * 255).round())
-                    .toARGB32(),
+                Color.fromARGB(
+                  255,
+                  v,
+                  (color.g * 255).round(),
+                  (color.b * 255).round(),
+                ).toARGB32(),
               ),
             ),
             _ChannelSlider(
               label: 'Green',
               value: (color.g * 255).round(),
               onChanged: (v) => _set(
-                Color.fromARGB(255, (color.r * 255).round(), v, (color.b * 255).round())
-                    .toARGB32(),
+                Color.fromARGB(
+                  255,
+                  (color.r * 255).round(),
+                  v,
+                  (color.b * 255).round(),
+                ).toARGB32(),
               ),
             ),
             _ChannelSlider(
               label: 'Blue',
               value: (color.b * 255).round(),
               onChanged: (v) => _set(
-                Color.fromARGB(255, (color.r * 255).round(), (color.g * 255).round(), v)
-                    .toARGB32(),
+                Color.fromARGB(
+                  255,
+                  (color.r * 255).round(),
+                  (color.g * 255).round(),
+                  v,
+                ).toARGB32(),
               ),
             ),
           ],

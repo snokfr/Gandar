@@ -101,7 +101,10 @@ class ArtworkEnricher {
   ///
   /// Steps 1 and 3 are what make a large import stop producing empty tiles:
   /// one cover is fetched and the rest of the album inherits it.
-  Future<String?> _coverFor(Track track, Map<String, String?> albumCache) async {
+  Future<String?> _coverFor(
+    Track track,
+    Map<String, String?> albumCache,
+  ) async {
     final album = track.album?.trim() ?? '';
 
     if (album.isNotEmpty) {
@@ -133,7 +136,10 @@ class ArtworkEnricher {
         artist: track.primaryArtist,
       );
     } catch (e) {
-      AppLogger.instance.debug('artwork', 'album lookup threw for "$album": $e');
+      AppLogger.instance.debug(
+        'artwork',
+        'album lookup threw for "$album": $e',
+      );
     }
     albumCache[album] = cover;
     return cover;

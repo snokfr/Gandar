@@ -213,10 +213,7 @@ class YoutubeExplodeResolver implements AudioResolver {
   void setAudioQuality(AudioQuality quality) {
     if (quality == _audioQuality) return;
     _audioQuality = quality;
-    AppLogger.instance.info(
-      'youtube',
-      'audio quality set to ${quality.name}',
-    );
+    AppLogger.instance.info('youtube', 'audio quality set to ${quality.name}');
   }
 
   final YoutubeExplode _yt;

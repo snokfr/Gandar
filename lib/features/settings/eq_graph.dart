@@ -54,8 +54,9 @@ class _EqGraphState extends State<EqGraph> {
   /// The node under the finger, or null when no drag is in progress.
   int? _activeBand;
 
-  static List<double> _gainsOf(List<EqBand> bands) =>
-      <double>[for (final band in bands) band.gain];
+  static List<double> _gainsOf(List<EqBand> bands) => <double>[
+    for (final band in bands) band.gain,
+  ];
 
   @override
   void didUpdateWidget(covariant EqGraph oldWidget) {
@@ -87,7 +88,10 @@ class _EqGraphState extends State<EqGraph> {
     final usable = size.height - EqGraphPainter.verticalPadding * 2;
     final t = usable <= 0
         ? 0.5
-        : ((local.dy - EqGraphPainter.verticalPadding) / usable).clamp(0.0, 1.0);
+        : ((local.dy - EqGraphPainter.verticalPadding) / usable).clamp(
+            0.0,
+            1.0,
+          );
     final gain = widget.maxGain - t * (widget.maxGain - widget.minGain);
 
     setState(() {
@@ -251,16 +255,8 @@ class EqGraphPainter extends CustomPainter {
     for (var i = 0; i < gains.length; i++) {
       final centre = Offset(_x(i, size), _y(gains[i], size));
       final active = i == activeBand;
-      canvas.drawCircle(
-        centre,
-        active ? 7 : 5,
-        Paint()..color = background,
-      );
-      canvas.drawCircle(
-        centre,
-        active ? 5 : 3.2,
-        Paint()..color = lineColor,
-      );
+      canvas.drawCircle(centre, active ? 7 : 5, Paint()..color = background);
+      canvas.drawCircle(centre, active ? 5 : 3.2, Paint()..color = lineColor);
       if (active) {
         canvas.drawCircle(
           centre,
@@ -291,7 +287,10 @@ class EqGraphPainter extends CustomPainter {
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    final x = topLeft.dx.clamp(0.0, (size.width - painter.width).clamp(0.0, size.width));
+    final x = topLeft.dx.clamp(
+      0.0,
+      (size.width - painter.width).clamp(0.0, size.width),
+    );
     painter.paint(canvas, Offset(x, topLeft.dy));
   }
 

@@ -18,7 +18,10 @@ abstract class ArtworkSource {
   /// catalogue does not use, and for anything that has never been released
   /// under its own name. An album cover is the right answer in all three
   /// cases: it is the picture the track is filed under.
-  Future<String?> albumArtworkFor({required String album, required String artist});
+  Future<String?> albumArtworkFor({
+    required String album,
+    required String artist,
+  });
 }
 
 /// Artwork from Apple's public iTunes Search API.
@@ -65,17 +68,20 @@ class ITunesArtwork implements ArtworkSource {
     required String album,
     required String artist,
   }) async {
-    final term = [artist, album]
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .join(' ');
+    final term = [
+      artist,
+      album,
+    ].map((s) => s.trim()).where((s) => s.isNotEmpty).join(' ');
     if (term.isEmpty) return null;
     return _search(term: term, entity: 'album');
   }
 
   /// One rate-limited search. Both entities answer with the same
   /// `results[0].artworkUrl100` shape, so the parsing is shared.
-  Future<String?> _search({required String term, required String entity}) async {
+  Future<String?> _search({
+    required String term,
+    required String entity,
+  }) async {
     try {
       final response = await _governor.schedule(
         () => _http.get<dynamic>(

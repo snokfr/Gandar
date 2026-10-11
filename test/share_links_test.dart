@@ -70,7 +70,10 @@ void main() {
 
       expect(text.split('\n').first, 'A, B — Stop The Wedding!');
       expect(text, contains('YouTube: https://www.youtube.com/watch?v=v1'));
-      expect(text, contains('Spotify: https://open.spotify.com/track/$_spotifyId'));
+      expect(
+        text,
+        contains('Spotify: https://open.spotify.com/track/$_spotifyId'),
+      );
     });
 
     test('spotify ids are recognised by shape alone', () {

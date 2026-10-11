@@ -216,14 +216,16 @@ class DriftLibraryRepository implements LibraryRepository {
     // keeps it recognisable and makes a collision with Spotify's 22-character
     // ids impossible by construction.
     final id = '${Playlist.localPrefix}${now.microsecondsSinceEpoch}';
-    await _db.into(_db.playlists).insert(
-      PlaylistsCompanion.insert(
-        id: id,
-        name: clean,
-        cachedAt: now,
-        isLocal: const Value(true),
-      ),
-    );
+    await _db
+        .into(_db.playlists)
+        .insert(
+          PlaylistsCompanion.insert(
+            id: id,
+            name: clean,
+            cachedAt: now,
+            isLocal: const Value(true),
+          ),
+        );
     return Playlist(id: id, name: clean, isLocal: true);
   }
 
@@ -302,8 +304,7 @@ class DriftLibraryRepository implements LibraryRepository {
   ) async {
     await _db.transaction(() async {
       await (_db.delete(_db.playlistTracks)..where(
-            (t) =>
-                t.playlistId.equals(playlistId) & t.trackId.equals(trackId),
+            (t) => t.playlistId.equals(playlistId) & t.trackId.equals(trackId),
           ))
           .go();
 

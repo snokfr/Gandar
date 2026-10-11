@@ -27,8 +27,14 @@ void main() {
     test('an id that is only whitespace still counts as missing', () {
       // Settings are sanitized on the way in, and the trim is what this proves:
       // "  " pasted from somewhere must not be treated as an application id.
-      const settings = PlaybackSettings(discordEnabled: true, discordClientId: '  ');
-      expect(DiscordPolicy.intentFor(settings.sanitized()), DiscordIntent.needClientId);
+      const settings = PlaybackSettings(
+        discordEnabled: true,
+        discordClientId: '  ',
+      );
+      expect(
+        DiscordPolicy.intentFor(settings.sanitized()),
+        DiscordIntent.needClientId,
+      );
     });
 
     test('on with an id publishes', () {

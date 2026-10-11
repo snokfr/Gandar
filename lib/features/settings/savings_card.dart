@@ -41,10 +41,7 @@ class SavingsCard extends ConsumerWidget {
               children: [
                 const Icon(Icons.savings_outlined),
                 const SizedBox(width: 8),
-                Text(
-                  'What you have saved',
-                  style: theme.textTheme.titleMedium,
-                ),
+                Text('What you have saved', style: theme.textTheme.titleMedium),
               ],
             ),
             const SizedBox(height: 4),
@@ -171,7 +168,8 @@ class SavingsCard extends ConsumerWidget {
             ),
             SettingSliderTile(
               title: 'Subscription price',
-              description: 'Monthly cost of the plan you did not buy. Spotify '
+              description:
+                  'Monthly cost of the plan you did not buy. Spotify '
                   'charges \$12.99 for its US Individual plan.',
               value: settings.savingsPremiumMonthlyCost,
               min: 0,
@@ -192,9 +190,8 @@ class SavingsCard extends ConsumerWidget {
               max: 30,
               divisions: 28,
               valueLabel: (v) => '${v.toStringAsFixed(0)} min',
-              onChanged: (v) => notifier.update(
-                settings.copyWith(savingsAdBreakMinutes: v),
-              ),
+              onChanged: (v) =>
+                  notifier.update(settings.copyWith(savingsAdBreakMinutes: v)),
             ),
             SettingSliderTile(
               title: 'Length of one ad',
@@ -204,9 +201,8 @@ class SavingsCard extends ConsumerWidget {
               max: 60,
               divisions: 60,
               valueLabel: (v) => '${v.toStringAsFixed(0)} s',
-              onChanged: (v) => notifier.update(
-                settings.copyWith(savingsAdSeconds: v),
-              ),
+              onChanged: (v) =>
+                  notifier.update(settings.copyWith(savingsAdSeconds: v)),
             ),
             SettingSliderTile(
               title: 'Ads per break',
@@ -216,9 +212,8 @@ class SavingsCard extends ConsumerWidget {
               max: 4,
               divisions: 8,
               valueLabel: (v) => v.toStringAsFixed(1),
-              onChanged: (v) => notifier.update(
-                settings.copyWith(savingsAdsPerBreak: v),
-              ),
+              onChanged: (v) =>
+                  notifier.update(settings.copyWith(savingsAdsPerBreak: v)),
             ),
             SettingSliderTile(
               title: 'Ad cost per thousand plays',
@@ -230,9 +225,8 @@ class SavingsCard extends ConsumerWidget {
               max: 60,
               divisions: 60,
               valueLabel: (v) => '\$${v.toStringAsFixed(0)}',
-              onChanged: (v) => notifier.update(
-                settings.copyWith(savingsAdsCpm: v),
-              ),
+              onChanged: (v) =>
+                  notifier.update(settings.copyWith(savingsAdsCpm: v)),
             ),
             SettingSliderTile(
               title: 'Artist payout per stream',
@@ -255,10 +249,7 @@ class SavingsCard extends ConsumerWidget {
             for (final source in _sources)
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  '• $source',
-                  style: theme.textTheme.bodySmall,
-                ),
+                child: Text('• $source', style: theme.textTheme.bodySmall),
               ),
           ],
         ),

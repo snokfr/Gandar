@@ -57,7 +57,9 @@ class PlaybackTemp {
     final local = Platform.environment['LOCALAPPDATA'];
     if (local != null && local.isNotEmpty) {
       listeners.add(
-        Directory(p.join(local, AppDirectory.vendor, AppDirectory.product, 'temp')),
+        Directory(
+          p.join(local, AppDirectory.vendor, AppDirectory.product, 'temp'),
+        ),
       );
     }
     try {

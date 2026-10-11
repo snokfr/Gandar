@@ -153,30 +153,27 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                             ? 'searching…'
                             : '${youTube.asData!.value.length} videos',
                         show: settings.showYouTubeInSearch,
-                        child: _asyncList(
-                          youTube,
-                          (videos) {
-                            // One queue for the whole result set, entered at the
-                            // row that was tapped.
-                            final queued = <Track>[
-                              for (final video in videos) video.toTrack(),
-                            ];
-                            return Column(
-                              children: [
-                                for (final video in videos)
-                                  _VideoRow(
-                                    video: video,
-                                    onPlay: () => player.playTracks(
-                                      queued,
-                                      startTrackId: video.trackId,
-                                    ),
+                        child: _asyncList(youTube, (videos) {
+                          // One queue for the whole result set, entered at the
+                          // row that was tapped.
+                          final queued = <Track>[
+                            for (final video in videos) video.toTrack(),
+                          ];
+                          return Column(
+                            children: [
+                              for (final video in videos)
+                                _VideoRow(
+                                  video: video,
+                                  onPlay: () => player.playTracks(
+                                    queued,
+                                    startTrackId: video.trackId,
                                   ),
-                                if (videos.isEmpty)
-                                  const _Hint('No YouTube matches.'),
-                              ],
-                            );
-                          },
-                        ),
+                                ),
+                              if (videos.isEmpty)
+                                const _Hint('No YouTube matches.'),
+                            ],
+                          );
+                        }),
                       ),
                       const SizedBox(height: 24),
                     ],

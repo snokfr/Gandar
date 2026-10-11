@@ -139,10 +139,8 @@ class ThemeTokens {
   };
 
   /// Whether this theme is a built-in preset, which cannot be edited in place.
-  bool get isBuiltIn => const <String>[
-    'spotify_classic',
-    'earthy_brown',
-  ].contains(id);
+  bool get isBuiltIn =>
+      const <String>['spotify_classic', 'earthy_brown'].contains(id);
 
   ThemeTokens copyWith({
     String? id,
