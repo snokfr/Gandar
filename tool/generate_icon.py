@@ -148,6 +148,128 @@ def render_mark(size: int) -> list[bytearray]:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Discord art assets
+# ---------------------------------------------------------------------------
+
+# Discord shows Rich Presence art in two places: a large image (the app mark)
+# and a small circular badge next to it. All three are square PNGs; the badge is
+# drawn as a filled circle rather than a bare glyph because Discord crops small
+# images to a circle, and a glyph floating on transparency gets its corners cut
+# off by that crop.
+DISCORD_SIZES = {
+    "gandar": 512,
+    "playing": 512,
+    "paused": 512,
+}
+
+
+def _inside_circle(x: float, y: float, cx: float, cy: float, r: float) -> bool:
+    return (x - cx) ** 2 + (y - cy) ** 2 <= r * r
+
+
+def _inside_triangle(
+    x: float,
+    y: float,
+    a: tuple[float, float],
+    b: tuple[float, float],
+    c: tuple[float, float],
+) -> bool:
+    def side(p, q) -> float:
+        return (p[0] - x) * (q[1] - y) - (q[0] - x) * (p[1] - y)
+
+    d1, d2, d3 = side(a, b), side(b, c), side(c, a)
+    negative = d1 < 0 or d2 < 0 or d3 < 0
+    positive = d1 > 0 or d2 > 0 or d3 > 0
+    return not (negative and positive)
+
+
+def render_badge(size: int, kind: str) -> list[bytearray]:
+    """Draws a play or pause badge: the accent disc with the glyph cut into it."""
+    centre = size / 2
+    radius = size / 2 - 1
+    glyph = GLYPH
+
+    if kind == "playing":
+        # A right-pointing triangle, optically centred: a triangle's visual
+        # centre sits left of its bounding box, so it is nudged right slightly.
+        height = size * 0.46
+        width = size * 0.40
+        left = centre - width / 2 - size * 0.01
+        top = centre - height / 2
+        # Named v0..v2, not a..c: those two names are already the pixel
+        # accumulators below, and shadowing them turns the triangle into a
+        # float.
+        v0 = (left, top)
+        v1 = (left + width, centre)
+        v2 = (left, top + height)
+    else:
+        bar_w = size * 0.13
+        bar_h = size * 0.46
+        gap = size * 0.10
+        top = centre - bar_h / 2
+        left = centre - gap / 2 - bar_w
+        right = centre + gap / 2
+
+    step = 1.0 / SS
+    rows_out: list[bytearray] = []
+    for py in range(size):
+        row = bytearray()
+        for px in range(size):
+            r = g = b = a = 0.0
+            for sy in range(SS):
+                y = py + (sy + 0.5) * step
+                for sx in range(SS):
+                    x = px + (sx + 0.5) * step
+                    if not _inside_circle(x, y, centre, centre, radius):
+                        continue
+                    if kind == "playing":
+                        ink = _inside_triangle(x, y, v0, v1, v2)
+                    else:
+                        ink = (
+                            left <= x <= left + bar_w or right <= x <= right + bar_w
+                        ) and top <= y <= top + bar_h
+                    colour = glyph if ink else _tile_colour(
+                        x, y, size * 0.08, size * 0.84
+                    )
+                    r += colour[0]
+                    g += colour[1]
+                    b += colour[2]
+                    a += 255.0
+            samples = SS * SS
+            if a == 0:
+                row += b"\x00\x00\x00\x00"
+            else:
+                covered = a / 255.0
+                row += bytes(
+                    (
+                        int(round(r / covered)),
+                        int(round(g / covered)),
+                        int(round(b / covered)),
+                        int(round(a / samples)),
+                    )
+                )
+        rows_out.append(row)
+    return rows_out
+
+
+def write_discord_assets(directory: Path) -> list[tuple[str, Path]]:
+    """Writes the three asset names the Discord application expects.
+
+    The names are the contract: `lib/data/discord/discord_presence.dart`
+    refers to `gandar`, `playing` and `paused`, and Discord matches them
+    exactly. Uploading these files under those names is all that is left.
+    """
+    written: list[tuple[str, Path]] = []
+    directory.mkdir(parents=True, exist_ok=True)
+    for name, size in DISCORD_SIZES.items():
+        rows = render_mark(size) if name == "gandar" else render_badge(size, name)
+        path = directory / f"{name}.png"
+        path.write_bytes(encode_png(size, size, rows))
+        written.append((name, path))
+    return written
+
+
 def encode_png(width: int, height: int, rows: list[bytearray]) -> bytes:
     """Writes 8-bit RGBA, filter type 0 on every row."""
     raw = bytearray()
@@ -403,6 +525,11 @@ def main() -> int:
         type=Path,
         help="also write a self-contained HTML proof sheet to this path",
     )
+    parser.add_argument(
+        "--discord-assets",
+        type=Path,
+        help="write gandar.png, playing.png and paused.png for Discord here",
+    )
     args = parser.parse_args()
 
     if args.png:
@@ -437,6 +564,10 @@ def main() -> int:
     if args.proof:
         write_proof_sheet(args.proof, images)
         print(f"Wrote {args.proof}")
+
+    if args.discord_assets:
+        for name, path in write_discord_assets(args.discord_assets):
+            print(f"Wrote {path} ({DISCORD_SIZES[name]}x{DISCORD_SIZES[name]})")
     return 0
 
 
