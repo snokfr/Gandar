@@ -27,6 +27,7 @@ class SyncedLyricsView extends StatefulWidget {
     super.key,
     required this.lyrics,
     required this.position,
+    this.onSeek,
     this.scrollable = true,
     this.activeAlignment = 0.42,
   });
@@ -35,6 +36,15 @@ class SyncedLyricsView extends StatefulWidget {
 
   /// Live playback position. Highlighting follows it.
   final ValueListenable<Duration> position;
+
+  /// Called with a line's own timestamp when that line is tapped.
+  ///
+  /// Null leaves the words as words. That is not a cosmetic difference: a line
+  /// you can tap has to be a line the song can actually be moved to, and the
+  /// caller is the only one that knows whether this track is the one playing —
+  /// jumping a different song around because someone tapped its lyrics would be
+  /// a bug that looks like magic.
+  final ValueChanged<Duration>? onSeek;
 
   final bool scrollable;
 
@@ -125,7 +135,9 @@ class _SyncedLyricsViewState extends State<SyncedLyricsView> {
     }
 
     final column = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      // Stretched, not start-aligned: a tap target that ends where the words
+      // happen to end makes a short line a small target and a long one wide.
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         for (var index = 0; index < _lines.length; index++) _buildLine(index),
       ],
@@ -155,9 +167,8 @@ class _SyncedLyricsViewState extends State<SyncedLyricsView> {
         ? tokens.textSecondaryColor.withValues(alpha: 0.5)
         : tokens.textSecondaryColor;
 
-    return Padding(
-      key: key,
-      padding: const EdgeInsets.symmetric(vertical: 7),
+    final words = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 8),
       child: AnimatedDefaultTextStyle(
         duration: Motion.adaptiveDuration(
           context,
@@ -177,6 +188,85 @@ class _SyncedLyricsViewState extends State<SyncedLyricsView> {
           // highlight appearing to stick on nothing.
           line.isBlank ? '•' : line.text,
           textAlign: TextAlign.start,
+        ),
+      ),
+    );
+
+    return Padding(
+      key: key,
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: widget.onSeek == null
+          ? words
+          : _SeekableLine(
+              at: line.at,
+              onSeek: widget.onSeek!,
+              child: words,
+            ),
+    );
+  }
+}
+
+/// One timed line, made a button.
+///
+/// Tapping it moves the song to that line, which is the whole reason to have
+/// timestamps: the words are a table of contents, and a table of contents you
+/// cannot click is a missed cue when the chorus you wanted is four minutes in.
+///
+/// The feedback is deliberately quiet — a tint under the pointer and a hand
+/// cursor. Nothing moves, nothing scales, so a hover does not push the words
+/// the user is reading around.
+class _SeekableLine extends StatefulWidget {
+  const _SeekableLine({
+    required this.at,
+    required this.onSeek,
+    required this.child,
+  });
+
+  /// Where this line begins. What the tap seeks to.
+  final Duration at;
+
+  final ValueChanged<Duration> onSeek;
+  final Widget child;
+
+  @override
+  State<_SeekableLine> createState() => _SeekableLineState();
+}
+
+class _SeekableLineState extends State<_SeekableLine> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.gandarTokens;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Tooltip(
+        message: 'Play from this line',
+        waitDuration: const Duration(milliseconds: 700),
+        child: InkWell(
+          onTap: () => widget.onSeek(widget.at),
+          borderRadius: BorderRadius.circular(tokens.radiusSm),
+          // The tint is drawn here instead, so it comes from the app's own
+          // tokens rather than from Material's overlay colors.
+          hoverColor: Colors.transparent,
+          focusColor: tokens.surfaceElevatedColor,
+          child: AnimatedContainer(
+            duration: Motion.adaptiveDuration(
+              context,
+              full: const Duration(milliseconds: 120),
+              reduced: Duration.zero,
+            ),
+            curve: Curves.easeOut,
+            decoration: BoxDecoration(
+              color: _hovered
+                  ? tokens.surfaceElevatedColor
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(tokens.radiusSm),
+            ),
+            child: widget.child,
+          ),
         ),
       ),
     );
@@ -218,8 +308,9 @@ class LyricsSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = context.gandarTokens;
     final theme = Theme.of(context);
+    final controller = ref.watch(playbackControllerProvider);
     // The player's own clock, so a seek moves the highlight with the audio.
-    final position = ref.watch(playbackControllerProvider).positionNotifier;
+    final position = controller.positionNotifier;
     final height = MediaQuery.sizeOf(context).height * 0.78;
 
     return SizedBox(
@@ -296,8 +387,22 @@ class LyricsSheet extends ConsumerWidget {
                           style: theme.textTheme.bodySmall,
                         ),
                       ),
-                      data: (lyrics) =>
-                          _LyricsBody(lyrics: lyrics, position: position),
+                      data: (lyrics) => ListenableBuilder(
+                        // The sheet outlives a track change (you can open it from
+                        // the queue), and whether its lines are tappable depends
+                        // on what is playing right now.
+                        listenable: controller,
+                        builder: (context, _) {
+                          final playingThis =
+                              controller.currentTrack?.id == track.id;
+                          return _LyricsBody(
+                            lyrics: lyrics,
+                            position: position,
+                            onSeek: playingThis ? controller.seek : null,
+                            seekBlocked: !playingThis,
+                          );
+                        },
+                      ),
                     ),
               ),
             ),
@@ -310,10 +415,21 @@ class LyricsSheet extends ConsumerWidget {
 }
 
 class _LyricsBody extends StatelessWidget {
-  const _LyricsBody({required this.lyrics, required this.position});
+  const _LyricsBody({
+    required this.lyrics,
+    required this.position,
+    this.onSeek,
+    this.seekBlocked = false,
+  });
 
   final Lyrics? lyrics;
   final ValueListenable<Duration> position;
+
+  /// Moves the song to a line's timestamp. Null disables tapping.
+  final ValueChanged<Duration>? onSeek;
+
+  /// This is another track's lyrics, so there is nothing here to move.
+  final bool seekBlocked;
 
   @override
   Widget build(BuildContext context) {
@@ -343,14 +459,31 @@ class _LyricsBody extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: Text(
-              'Synced — the current line follows the song',
+              onSeek == null
+                  ? 'Synced — the current line follows the song'
+                  : 'Synced — tap any line to play from it',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: tokens.textSecondaryColor,
+              ),
+            ),
+          ),
+        if (seekBlocked)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'These are the words of another song, so its lines stay words '
+              'until you play it.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: tokens.textSecondaryColor,
               ),
             ),
           ),
         Expanded(
-          child: SyncedLyricsView(lyrics: value, position: position),
+          child: SyncedLyricsView(
+            lyrics: value,
+            position: position,
+            onSeek: onSeek,
+          ),
         ),
         if (value.attribution.isNotEmpty)
           Padding(

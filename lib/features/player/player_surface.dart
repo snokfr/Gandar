@@ -9,6 +9,7 @@ import '../../domain/models/track.dart';
 import '../../state/playback_controller.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
+import '../artists/artist_page.dart';
 import 'lyrics_view.dart';
 import 'share_links.dart';
 
@@ -293,13 +294,29 @@ class PlayerBar extends ConsumerWidget {
                                         .textTheme
                                         .titleMedium,
                                   ),
-                                  Text(
-                                    track.artists.join(', '),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall,
+                                  // The artist line on the now-playing screen
+                                  // leads to everything else of theirs here.
+                                  InkWell(
+                                    onTap: track.artists.isEmpty
+                                        ? null
+                                        : () => openArtist(
+                                            context,
+                                            track.primaryArtist,
+                                          ),
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Text(
+                                      track.artists.join(', '),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: context
+                                                .gandarTokens
+                                                .accentColor,
+                                          ),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -801,7 +818,7 @@ class _LyricsSection extends ConsumerWidget {
                 SectionHeader(
                   title: 'Lyrics',
                   subtitle: lyrics.hasSynced
-                      ? '${lyrics.attribution} · following the song'
+                      ? '${lyrics.attribution} · tap a line to play from it'
                       : lyrics.attribution,
                   action: OutlinedButton.icon(
                     onPressed: () => showLyricsSheet(context, track),
@@ -815,6 +832,11 @@ class _LyricsSection extends ConsumerWidget {
                   position: ref
                       .watch(playbackControllerProvider)
                       .positionNotifier,
+                  // These are the words of the track that is playing — the
+                  // section is built from the current track — so a line is a
+                  // place the song can be moved to.
+                  onSeek: (at) =>
+                      ref.read(playbackControllerProvider).seek(at),
                   // This sheet is already a scrollable; a second scroll view
                   // inside it would fight it for the drag.
                   scrollable: false,

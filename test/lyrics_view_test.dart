@@ -159,6 +159,57 @@ void main() {
     expect(find.text('third line'), findsOneWidget);
   });
 
+  testWidgets('tapping a line asks for that line\'s own moment', (
+    tester,
+  ) async {
+    final position = ValueNotifier<Duration>(Duration.zero);
+    addTearDown(position.dispose);
+    final sought = <Duration>[];
+
+    await tester.pumpWidget(
+      _wrap(
+        SyncedLyricsView(
+          lyrics: const Lyrics(plain: 'first\nsecond\nthird', synced: _lrc),
+          position: position,
+          onSeek: sought.add,
+        ),
+      ),
+    );
+
+    // A line ahead of the playhead, one behind it and one the song has not
+    // reached yet: all three are jumps, and each goes to its own timestamp.
+    await tester.tap(find.text('second line'));
+    await tester.tap(find.text('third line'));
+    await tester.tap(find.text('first line'));
+    expect(sought, const <Duration>[
+      Duration(seconds: 14),
+      Duration(seconds: 18),
+      Duration(seconds: 10),
+    ]);
+  });
+
+  testWidgets('without something to seek to the words are not buttons', (
+    tester,
+  ) async {
+    final position = ValueNotifier<Duration>(Duration.zero);
+    addTearDown(position.dispose);
+
+    await tester.pumpWidget(
+      _wrap(
+        SyncedLyricsView(
+          lyrics: const Lyrics(plain: 'first\nsecond\nthird', synced: _lrc),
+          position: position,
+        ),
+      ),
+    );
+
+    // No handler means no tap targets, so tapping a line is not a thing that
+    // silently does nothing.
+    expect(find.byType(InkWell), findsNothing);
+    await tester.tap(find.text('second line'));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('an empty lyric is not a crash', (tester) async {
     final position = ValueNotifier<Duration>(Duration.zero);
     addTearDown(position.dispose);
