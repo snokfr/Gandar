@@ -211,6 +211,15 @@ class _Kernel32 {
   static const int invalidHandleValue = -1;
   static const int errorPipeBusy = 231;
   static const int errorFileNotFound = 2;
+
+  /// The pipe is there and free, but this process is not allowed to open it.
+  ///
+  /// Windows decides this with the mandatory integrity label a named pipe
+  /// carries, and it is not about the user account: two processes of the *same*
+  /// user cannot talk through a pipe when one is elevated and the other is not.
+  /// Discord's own pipe is refused to a process on the wrong side of that line,
+  /// which surfaces here as a bare 5.
+  static const int errorAccessDenied = 5;
 }
 
 /// A `CreateFileW` failure, with the code so the caller can tell "nothing
@@ -424,7 +433,18 @@ Future<DiscordTransport> openDiscordTransport({
       // "Nothing on this name" is the expected case for nine of the ten
       // candidates; anything else is worth repeating, because it is the only
       // way to see why a pipe that does exist refused to open.
-      if (failure.error != _Kernel32.errorFileNotFound) {
+      if (failure.error == _Kernel32.errorAccessDenied) {
+        // A raw "Win32 error 5" reads as a bug in Gandar. It is not: it means
+        // Discord is running with different privileges from this app, and
+        // Windows will not let the two talk. Saying which way round it usually
+        // is, and what to do, is the difference between a dead end and a fix.
+        broken.add(
+          '${failure.path} exists but refuses Gandar. This normally means '
+          'Gandar and Discord are running with different privileges — most '
+          'often Discord as administrator and Gandar not. Start both the same '
+          'way (normally is best) and it will connect.',
+        );
+      } else if (failure.error != _Kernel32.errorFileNotFound) {
         broken.add(
           failure.error == _Kernel32.errorPipeBusy
               ? '${failure.path} is there but every instance is busy'
@@ -607,8 +627,17 @@ class DiscordIpc implements DiscordConnection {
     try {
       return await completer.future.timeout(timeout);
     } on TimeoutException {
-      // Discord answers quickly or not at all; a missing reply is reported as
-      // "no answer" rather than turned into a connection failure.
+      // A missing reply is reported as "no answer" rather than turned into a
+      // connection failure — the activity may well be showing — but it is
+      // logged, because silence is a real failure mode that is otherwise
+      // indistinguishable from success: a Discord client sitting on an error
+      // screen accepts the connection and then never answers anything. Without
+      // this line that machine looks exactly like a working one.
+      AppLogger.instance.warn(
+        'discord',
+        'Discord did not answer $command within '
+            '${timeout.inSeconds}s; the activity may not be showing',
+      );
       return null;
     } finally {
       _pending.remove(nonce);
