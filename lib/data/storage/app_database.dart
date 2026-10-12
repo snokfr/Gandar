@@ -147,6 +147,46 @@ class AppDatabase extends _$AppDatabase {
     idxHistoryPlayedAt,
   ];
 
+  /// The names sqlite itself has on record for entities of [type] (`table`,
+  /// `index`, `view`), read from the file rather than assumed from the version
+  /// number. See [migration] for why that matters.
+  Future<Set<String>> _existing(String type) async {
+    final rows = await customSelect(
+      'SELECT name FROM sqlite_master WHERE type = ?',
+      variables: [Variable<String>(type)],
+    ).get();
+    return {for (final row in rows) row.read<String>('name')};
+  }
+
+  /// The columns [table] actually has right now, per `PRAGMA table_info`.
+  Future<Set<String>> _columnsOf(String table) async {
+    final rows = await customSelect('PRAGMA table_info("$table")').get();
+    return {for (final row in rows) row.read<String>('name')};
+  }
+
+  /// Creates [index] unless the file already has an index of that name.
+  ///
+  /// `CREATE INDEX` is not a no-op when the index exists, it is an error, so
+  /// every index an upgrade creates goes through here. A failure is logged and
+  /// swallowed: a missing index costs speed, never correctness, and an upgrade
+  /// must never be left half-applied over one.
+  Future<void> _createIndexIfMissing(
+    Migrator m,
+    Index index,
+    Set<String> existing,
+  ) async {
+    if (existing.contains(index.entityName)) return;
+    try {
+      await m.createIndex(index);
+    } catch (e) {
+      AppLogger.instance.warn(
+        'database',
+        'could not create ${index.entityName}',
+        error: e,
+      );
+    }
+  }
+
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) async {
@@ -155,34 +195,47 @@ class AppDatabase extends _$AppDatabase {
     },
     onUpgrade: (m, from, to) async {
       AppLogger.instance.info('database', 'upgrading schema v$from -> v$to');
+
+      // Every step below checks what the file already contains instead of
+      // trusting `from` alone.
+      //
+      // A version number only moves once the upgrade as a whole has finished,
+      // so one that dies part-way leaves work it already did to be repeated on
+      // the next launch — and neither `ALTER TABLE ... ADD COLUMN` nor
+      // `CREATE INDEX` is a no-op when its result is already there. That is
+      // exactly how a single interrupted launch used to leave the library
+      // permanently unopenable with 'duplicate column name: is_local': the
+      // column was in the file, the version still said 3, and the upgrade
+      // failed the same way every time. Reading the schema makes each step
+      // safe to repeat, so a half-applied upgrade converges instead of
+      // wedging.
+      final tables = await _existing('table');
+      final indexes = await _existing('index');
+
       if (from < 2) {
         // v2 adds indexes only: no table or column changes, so an existing
         // cache, mapping table and play history are all preserved.
         for (final index in _v2Indexes) {
-          try {
-            await m.createIndex(index);
-          } catch (e) {
-            // A missing index costs speed, never correctness. Never let the
-            // upgrade fail over it.
-            AppLogger.instance.warn(
-              'database',
-              'could not create ${index.entityName}',
-              error: e,
-            );
-          }
+          await _createIndexIfMissing(m, index, indexes);
         }
       }
-      if (from < 3) {
+      if (from < 3 && !tables.contains('playlist_tracks')) {
         // v3 adds the local playlist track list, used by imports. Additive:
         // existing tracks, mappings, cache entries and history are untouched.
         await m.createTable(playlistTracks);
-        await m.createIndex(idxPlaylistTracksPlaylist);
       }
+      // The index over that table, whether it was just created or was already
+      // there. The [tables] snapshot above predates the `CREATE TABLE`, so it
+      // cannot answer that on its own.
+      await _createIndexIfMissing(m, idxPlaylistTracksPlaylist, indexes);
       if (from < 4) {
         // v4 marks which playlists the user made here. Additive: every
         // existing playlist defaults to false, i.e. imported, which is what
         // everything stored before this version was.
-        await m.addColumn(playlists, playlists.isLocal);
+        final columns = await _columnsOf('playlists');
+        if (!columns.contains('is_local')) {
+          await m.addColumn(playlists, playlists.isLocal);
+        }
       }
     },
     beforeOpen: (details) async {
