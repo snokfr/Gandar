@@ -215,22 +215,40 @@ and Discord's own implementation notes,
 | Discord answers the handshake with a **FRAME (opcode 1)** containing `READY` | The handshake future completes on the `READY` event, and times out with a sentence rather than hanging |
 | Commands and events travel as **FRAME** payloads, with a `nonce` used to match a reply to its request | `send()` puts a nonce on the command and completes the waiting future when that nonce comes back |
 | PING (3) must be answered, and CLOSE (2) means the session is over | Both handled in `_dispatch` |
+| `SET_ACTIVITY` is a FRAME whose `args` are `pid` and `activity`; the activity's text slots (`details`, `state`, `assets.large_text`, `assets.small_text`) hold **2 to 128 characters each** | `DiscordPresence._text` clips at 128 and pads anything shorter than 2, so a one-character title is not a reason for the whole activity to be rejected |
+| Timestamps are **Unix epoch seconds** in the published examples, while every shipping RPC client (Discord's own `discord-rpc`, discord.js) sends **milliseconds** | Gandar sends milliseconds, because that is what the client and every existing app exchange — verified by setting an activity on a real client and reading back what it accepted |
+| The activity `type` may be `0` (Playing), `2` (Listening), `3` (Watching) or `5` (Competing) | Left out, so Discord shows its default. A music player could ask for `2`; that is a change to make deliberately, and it is not needed for the presence to work |
 
-### The one thing the documentation does not settle
+### The pipe refused: measured, not guessed
 
-The pipe being refused with **Win32 error 5** is an integrity-level problem, not
-an account problem: two programs from the same user cannot talk through a named
-pipe when one is elevated and the other is not. Microsoft documents the general
-rule — access to both ends of a named pipe is decided by the pipe's security
-descriptor and the caller's token
-([Named Pipe Security and Access Rights](https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-security-and-access-rights))
-— but Discord does not publish the descriptor its client creates, and the
-"both must match" behaviour is reported by users rather than guaranteed in any
-Discord document.
+The refusal that used to be blamed on elevation was measured on a real machine
+while this was written, with an activity actually set:
 
-So Gandar measures **its own** elevation (`isRunningElevated()`, via
-`TokenElevation`) and reports only that. It cannot read Discord's, and the
-message says so instead of asserting which side is high. The remedy it names is
-the one that is in this app's control: **start Gandar normally** — or, if you
-want both elevated, start Discord as administrator as well and restart Gandar
-so the two match.
+* an **elevated** (high-integrity) process opened `\\.\pipe\discord-ipc-0` owned
+  by an ordinary, non-elevated Discord, completed the `v: 1` handshake, and had
+  a `SET_ACTIVITY` accepted — the client echoed the activity back, resolved the
+  `gandar` art asset to its id, and reported `type: 0`.
+
+So *an elevated Gandar is not, by itself, a reason for a refusal*, and the old
+message — "Gandar is running as administrator … Windows will not let them talk"
+— was wrong about its own case. Microsoft's rule is one-directional: a process
+below a pipe's integrity level cannot obtain *write* access to it, which is why
+an **elevated Discord** does block an ordinary app. It does not work the other
+way round.
+
+What the app does now is measure, and its message is decided by what it finds
+(`discordPipeRefusedAdvice`, tested case by case in
+`test/discord_advice_test.dart`):
+
+| What is measured | What the app says |
+| --- | --- |
+| The pipe's owner is **another Windows account** (`GetSecurityInfo` with `READ_CONTROL`, which a pipe that refuses read/write will still often grant) | Names both accounts, and says plainly that being an administrator does not help: Windows keeps two accounts apart |
+| **Discord is elevated**, Gandar is not | Names Discord as the elevated one — this is the direction Windows really refuses — and suggests starting Discord normally, or elevating Gandar to match |
+| **Gandar is elevated**, Discord is not | Says that this is *not* the usual reason, and points at restarting Discord instead of at Gandar's shortcut |
+| Neither is elevated, or Discord is not running at all | Says so: not an administrator problem; a leftover pipe or something else on the machine holding the name |
+| Nothing could be measured | Says that too, rather than picking a side |
+
+`tool/discord_probe.dart` is that measurement as a program: it prints this
+process's SID, elevation and integrity level, which `discord-ipc-N` pipes exist
+and what each answers, who owns a refusing pipe, and — given an application id —
+performs the handshake and a real `SET_ACTIVITY`.

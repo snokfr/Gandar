@@ -11,6 +11,7 @@ import '../../state/providers.dart';
 import '../../widgets/common.dart';
 import '../../widgets/track_picker.dart';
 import '../player/player_surface.dart' show formatDuration;
+import 'mashup_export_card.dart';
 import 'mashup_words.dart';
 
 /// Builds and plays a real mashup: two or more records layered, each trimmed to
@@ -133,8 +134,10 @@ class MashupPage extends ConsumerWidget {
                     'do play at the same time. Set where each one starts and '
                     'ends in its own recording, where it enters the mix, and how '
                     'loud it sits, then listen and move around: the timeline '
-                    'takes you to any moment of the mix. Nothing here is '
-                    'beat-matched — you place the parts, the players follow.',
+                    'takes you to any moment of the mix. When it sounds right, '
+                    'export writes it to an audio file you can keep. Nothing '
+                    'here is beat-matched — you place the parts, the players '
+                    'follow.',
                     style: theme.textTheme.bodySmall,
                   ),
                 ),
@@ -241,14 +244,23 @@ class MashupPage extends ConsumerWidget {
                 ),
                 const SliverToBoxAdapter(child: SizedBox(height: 32)),
               ],
-              // Always here, empty mix or not: an empty mix is exactly when
-              // opening a saved one is what you came to do, and a list that
-              // only appears once you have built something is a list you
-              // cannot use to get back what you built.
+              // The two cards that are always here, empty mix or not. An empty
+              // mix is exactly when opening a saved one is what you came to do,
+              // a list that only appears once you have built something is a
+              // list you cannot use to get back what you built — and the export
+              // card has to be reachable in the same place whether or not there
+              // is anything in the mix, so it is never the reason a layout
+              // moved under someone’s finger.
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                   child: _SavedMashupsCard(controller: controller),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                  child: const MashupExportCard(),
                 ),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 32)),

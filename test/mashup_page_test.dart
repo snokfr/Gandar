@@ -15,11 +15,15 @@ import 'package:gandar/data/mashup/mashup_store.dart';
 import 'package:gandar/data/repositories/local_repositories.dart';
 import 'package:gandar/data/storage/app_database.dart';
 import 'package:gandar/data/usage/app_usage.dart';
+import 'package:gandar/domain/models/mashup.dart';
 import 'package:gandar/domain/models/resolved_stream.dart';
 import 'package:gandar/domain/models/track.dart';
 import 'package:gandar/domain/repositories/repositories.dart';
 import 'package:gandar/features/mashup/mashup_page.dart';
 import 'package:gandar/playback/audio_engine/audio_engine.dart';
+import 'package:gandar/playback/export/export_cancelled.dart';
+import 'package:gandar/playback/export/export_job.dart';
+import 'package:gandar/playback/export/mashup_exporter.dart';
 import 'package:gandar/playback/preloader.dart';
 import 'package:gandar/state/app_dependencies.dart';
 import 'package:gandar/state/playback_controller.dart';
@@ -137,12 +141,14 @@ Widget _page(
   AppDependencies dependencies,
   MashupStore store, {
   LyricsSource lyrics = const _NoLyrics(),
+  MashupExport? export,
 }) => ProviderScope(
   retry: gandarProviderRetry,
   overrides: [
     appDependenciesProvider.overrideWithValue(dependencies),
     mashupStoreProvider.overrideWithValue(store),
     lyricsSourceProvider.overrideWithValue(lyrics),
+    if (export != null) mashupExportProvider.overrideWithValue(export),
   ],
   child: MaterialApp(
     theme: ThemeEngine.build(ThemePresets.spotifyClassic),
@@ -327,7 +333,12 @@ void main() {
   ) async {
     final (dependencies, players) = await _harness();
     addTearDown(dependencies.database.close);
-    tester.view.physicalSize = const Size(1200, 1600);
+    // Tall enough that the transport, the timeline and the words are all laid
+    // out at once. `ensureVisible` aligns its target to the top of the viewport,
+    // so on a shorter surface the transport would be scrolled out of the cache
+    // and disposed — and the number this test is about would be gone rather
+    // than wrong.
+    tester.view.physicalSize = const Size(1200, 2200);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
@@ -446,7 +457,9 @@ void main() {
   ) async {
     final (dependencies, _) = await _harness();
     addTearDown(dependencies.database.close);
-    tester.view.physicalSize = const Size(1200, 1600);
+    // As above: tall enough that scrolling to the words does not dispose the
+    // card above them.
+    tester.view.physicalSize = const Size(1200, 2200);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
@@ -520,6 +533,124 @@ void main() {
     expect(find.text('2 songs · 6:56 mix · 1 overlap'), findsOneWidget);
     expect(find.text('1 · playing'), findsOneWidget);
     expect(players.engines, hasLength(2));
+  }, skip: _skipWithoutSqlite);
+
+  testWidgets('a mix is exported to a named audio file', (tester) async {
+    final (dependencies, _) = await _harness();
+    addTearDown(dependencies.database.close);
+    tester.view.physicalSize = const Size(1200, 2500);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    Mashup? asked;
+    String? askedName;
+    Future<ExportOutcome> export({
+      required Mashup mashup,
+      required String name,
+      void Function(ExportProgress progress)? onProgress,
+      bool Function()? isCancelled,
+    }) async {
+      asked = mashup;
+      askedName = name;
+      onProgress?.call(
+        const ExportProgress(
+          stage: 'Opening “Song A”',
+          partIndex: 1,
+          partCount: 2,
+          fraction: 0.4,
+        ),
+      );
+      return const ExportOutcome(
+        path: r'C:\Users\you\exports\Test blend.wav',
+        sampleRate: 48000,
+        channels: 2,
+        duration: Duration(seconds: 35),
+        peak: 0.72,
+        clippedSamples: 0,
+        parts: <ExportedPart>[],
+        warnings: <String>[],
+      );
+    }
+
+    await tester.pumpWidget(
+      _page(dependencies, _temporaryStore(), export: export),
+    );
+    await tester.pumpAndSettle();
+
+    final button = find.widgetWithText(FilledButton, 'Export the mix');
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<FilledButton>(button).onPressed,
+      isNull,
+      reason: 'there is nothing to write yet',
+    );
+
+    await _addBothSongs(tester);
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+
+    // The name is asked for, and the arrangement it was asked about really is
+    // the one on screen.
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Test blend');
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Export'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(askedName, 'Test blend');
+    expect(asked!.parts, hasLength(2));
+    expect(asked!.parts.first.track.id, 'a');
+
+    // And the outcome is on the card: where it went, and what is in it.
+    expect(find.textContaining(r'Test blend.wav'), findsOneWidget);
+    expect(find.textContaining('0:35'), findsWidgets);
+    expect(find.textContaining('48.0 kHz'), findsOneWidget);
+    expect(find.textContaining('Wrote “Test blend”'), findsOneWidget);
+  }, skip: _skipWithoutSqlite);
+
+  testWidgets('an export that fails says what went wrong', (tester) async {
+    final (dependencies, _) = await _harness();
+    addTearDown(dependencies.database.close);
+    tester.view.physicalSize = const Size(1200, 2500);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    Future<ExportOutcome> export({
+      required Mashup mashup,
+      required String name,
+      void Function(ExportProgress progress)? onProgress,
+      bool Function()? isCancelled,
+    }) async => throw const ExportCancelled();
+
+    await tester.pumpWidget(
+      _page(dependencies, _temporaryStore(), export: export),
+    );
+    await _addBothSongs(tester);
+
+    final button = find.widgetWithText(FilledButton, 'Export the mix');
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Test blend');
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Export'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Cancelling is not a failure: nothing red, and the button is ready again.
+    expect(find.text('The export was cancelled.'), findsOneWidget);
+    expect(find.textContaining('Could not export'), findsNothing);
+    expect(tester.widget<FilledButton>(button).onPressed, isNotNull);
   }, skip: _skipWithoutSqlite);
 
   testWidgets('an empty mix offers no transport at all', (tester) async {

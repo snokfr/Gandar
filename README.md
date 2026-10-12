@@ -112,12 +112,26 @@ Metadata comes from Spotify; the audio never does.
 
 **Mashup**
 
-- A **Mashup** tab that blends two or more tracks into one continuous set:
-  pick the songs, choose how long each one takes to become the next, and play.
-  The blend is saved as a real playlist if you want it again.
-- Be clear about what it is: a player runs one stream at a time, so this
-  *blends* records into a gapless set — it does not layer two songs on top of
-  each other, which would need two decoders and a beat grid.
+- A **Mashup** tab that layers two or more tracks into one mix: each song gets
+  its own player, its own slice (where it starts and stops in the recording),
+  its own entry point in the mix, and its own level.
+- A **blend** control sets how far each part overlaps the one before it, so the
+  same songs can be a tight drop or a long crossover.
+- A **timeline** you can press or drag to move to any moment of the mix, and a
+  **words** card that lists each part's lyrics with the line you are hearing —
+  tapping a line jumps the mix to it.
+- **Saved as a file, not a playlist row**: a mashup is written to
+  `<data>/mashups/<name>.json` with every slice, entry and level, so it can be
+  reopened and edited later. The same songs can also be saved as an ordinary
+  playlist.
+- **Export writes the mix to an audio file.** The layers are decoded to PCM and
+  summed by Gandar itself, sample by sample, and the result is written as a
+  16-bit WAV into `<data>/exports/`. It is a WAV because nothing in the bundled
+  libmpv can encode an MP3 — and every editor can turn a WAV into one.
+- Be clear about what it is not: two independent players are not locked to a
+  beat grid, so parts are placed by ear rather than beat-matched, and a mix
+  whose layers are loud will clip rather than being limited — the export says
+  when that happened instead of hiding it.
 
 **Savings**
 
@@ -368,8 +382,11 @@ playlist).
   artist and prefers the first result whose channel name contains the artist's,
   so a short or common name can pick the wrong channel. It is labelled as a
   guess wherever it is shown.
-- **A mashup blends, it does not layer.** Its own tab says so: one stream plays
-  at a time, so two songs cannot be superimposed.
+- **A mashup layers, but it is not beat-matched.** Each part has its own
+  player, so the layers really do sound together and the export is the mix you
+  hear — but nothing aligns them to a tempo grid, and two layers at a high level
+  can sum past full scale. The screen and the export both say so rather than
+  quietly limiting the result.
 - **The savings figures are third-party estimates, not Spotify's numbers.**
   Spotify publishes its per-subscriber revenue (~€4.89/month in Q2 2026) but
   not a per-hour ad figure or a per-stream rate. The card therefore models the

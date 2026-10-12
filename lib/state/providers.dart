@@ -24,6 +24,7 @@ import '../domain/models/artist.dart';
 import '../domain/models/listening_stats.dart';
 import '../domain/models/playlist.dart';
 import '../domain/models/track.dart';
+import '../playback/export/mashup_exporter.dart';
 import 'app_dependencies.dart';
 import 'mashup_controller.dart';
 import 'playback_controller.dart';
@@ -177,6 +178,18 @@ final mashupControllerProvider = Provider<MashupController>((ref) {
 final savedMashupsProvider = FutureProvider<List<SavedMashup>>(
   (ref) => ref.watch(mashupStoreProvider).list(),
 );
+
+/// Writes a mix to an audio file.
+///
+/// A function rather than a controller: an export is one long job with progress
+/// and an outcome, it belongs to the screen that asked for it, and nothing else
+/// in the app needs to know it happened. It resolves songs through the same
+/// resolver playback uses, so a mix mostly of cached tracks exports without
+/// touching the network.
+final mashupExportProvider = Provider<MashupExport>((ref) {
+  final deps = ref.watch(appDependenciesProvider);
+  return buildMashupExporter(resolve: deps.audioResolver.resolve);
+});
 
 /// Everything the library holds by one artist.
 ///
@@ -859,7 +872,16 @@ class DiscordPresenceController extends Notifier<DiscordState> {
   }
 
   void _fail(String detail) {
-    AppLogger.instance.debug('discord', detail);
+    // The first time a particular failure happens it goes into the log at warn
+    // level. Without that, everything Discord does wrong is visible only inside
+    // the settings card — which is how a connection that has never once worked
+    // leaves no trace in the log at all. The retries that follow stay at debug,
+    // so a machine with no Discord does not fill the file with the same line.
+    if (detail != state.detail) {
+      AppLogger.instance.warn('discord', detail);
+    } else {
+      AppLogger.instance.debug('discord', detail);
+    }
     _set(DiscordState(status: DiscordStatus.failed, detail: detail));
     _scheduleReconnect();
   }

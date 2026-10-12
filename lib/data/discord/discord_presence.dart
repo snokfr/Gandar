@@ -93,19 +93,18 @@ class DiscordPresence {
 
     final hasTrack = showTrack && track != null;
     final details = hasTrack
-        ? _clip(track.title, 128)
+        ? _text(track.title)
         : (isPlaying ? 'Playing' : idleText);
     final state = hasTrack
-        ? _clip(
+        ? _text(
             track.artists.isEmpty ? 'Unknown artist' : track.artists.join(', '),
-            128,
           )
         : null;
 
-    final largeText = hasTrack ? _clip(track.album ?? 'Gandar', 128) : 'Gandar';
+    final largeText = hasTrack ? _text(track.album ?? 'Gandar') : 'Gandar';
 
     final smallText = showAppTime && lifetime.inMinutes >= 1
-        ? _clip('${describeDuration(lifetime)} in Gandar', 128)
+        ? _text('${describeDuration(lifetime)} in Gandar')
         : null;
 
     final activity = <String, Object?>{
@@ -151,12 +150,20 @@ class DiscordPresence {
     return timestamps;
   }
 
-  /// Discord truncates long strings, and a 300-character title would be cut
-  /// mid-word by Discord rather than by us.
-  static String _clip(String value, int max) {
+  /// A string Discord will accept in one of the four text slots.
+  ///
+  /// Discord truncates long strings, so a 300-character title would be cut
+  /// mid-word by the client rather than by us — and Discord's current field
+  /// rules say these are **2 to 128 characters**, not "up to 128": a track
+  /// called `X` is one character and would have its activity rejected. So a
+  /// short value is padded rather than sent as it is, which shows as one extra
+  /// space on the profile and keeps the presence working.
+  static String _text(String value, {int max = 128, int min = 2}) {
     final trimmed = value.trim();
-    if (trimmed.length <= max) return trimmed;
-    return '${trimmed.substring(0, max - 1)}…';
+    final clipped = trimmed.length <= max
+        ? trimmed
+        : '${trimmed.substring(0, max - 1)}…';
+    return clipped.length >= min ? clipped : clipped.padRight(min);
   }
 
   /// `2 h 14 m`, `45 min`, `30 s`.

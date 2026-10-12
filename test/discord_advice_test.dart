@@ -1,82 +1,176 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gandar/data/discord/discord_ipc.dart';
+import 'package:gandar/data/discord/windows_session.dart';
 
 /// The words a person reads when Discord's pipe refuses Gandar.
 ///
-/// The fact that matters is *which* program is elevated: the fix is to start
-/// the other one the same way, and advice that names the wrong side sends
-/// someone to change a program that was never the problem. Only Windows can
-/// answer it, so all three cases have to say something true.
+/// These used to be three cases of one guess: which of the two programs was
+/// elevated. That guess is wrong in the direction it was most confident about —
+/// an elevated program *can* write to an ordinary one's pipe, which was measured
+/// on a real machine (an elevated process opened Discord's `discord-ipc-0` and
+/// completed a handshake and a `SET_ACTIVITY`) — and it named the wrong cause
+/// for the most common one of all, a pipe belonging to a different Windows
+/// account.
+///
+/// So the advice now takes the facts and is tested on them: who owns the pipe,
+/// what Discord is running as, and whether this process is elevated.
 void main() {
   const pipe = r'\\.\pipe\discord-ipc-0';
+  const us = 'S-1-5-21-450133605-757460015-1053418532-1001';
+  const them = 'S-1-5-21-450133605-757460015-1053418532-1002';
 
-  group('when Discord refuses the pipe', () {
-    test('an elevated Gandar is named as the elevated side', () {
-      final advice = discordPipeRefusedAdvice(path: pipe, elevated: true);
+  DiscordProcessInfo discord({bool? elevated}) => DiscordProcessInfo(
+    pid: 4242,
+    executable: 'Discord.exe',
+    userSid: us,
+    elevated: elevated,
+    integrity: elevated == true ? 'high' : 'medium',
+  );
 
-      expect(advice, contains(pipe));
-      expect(advice, contains('Gandar is running as administrator'));
-      expect(
-        advice,
-        contains('Discord\u2019s own level cannot be read from here'),
-        reason: 'only Gandar\u2019s level was measured, so only that may be '
-            'stated as fact',
+  String advice({
+    bool? elevated,
+    String? pipeOwner,
+    List<DiscordProcessInfo>? discordProcesses,
+    String? ourSid = us,
+  }) => discordPipeRefusedAdvice(
+    path: pipe,
+    elevated: elevated,
+    pipeOwner: pipeOwner,
+    ourSid: ourSid,
+    discord: discordProcesses,
+  );
+
+  group('when the pipe belongs to another account', () {
+    test('it says so, and says elevation is not the answer', () {
+      final text = advice(
+        elevated: true,
+        pipeOwner: them,
+        discordProcesses: <DiscordProcessInfo>[discord(elevated: true)],
       );
+
+      expect(text, contains(pipe));
+      expect(text, contains('different Windows account'));
+      expect(text, contains('…-1002'), reason: 'the account that owns it');
+      expect(text, contains('…-1001'), reason: 'the account Gandar is running as');
+      expect(text, contains('Being an administrator does not help here'));
       expect(
-        advice,
-        isNot(contains('Discord is most likely')),
-        reason: 'the elevated program is known, so nothing needs guessing',
+        text,
+        isNot(contains('start both the same way')),
+        reason: 'two accounts cannot be matched by starting things differently',
       );
-      expect(
-        advice,
-        isNot(contains('Discord is not')),
-        reason: 'Discord\u2019s side of the mismatch was never measured',
-      );
-      // The way out of this one is to stop elevating Gandar: that is the
-      // program the reader controls, and the one they just started wrong.
-      expect(advice, contains('open it normally'));
-      expect(advice, contains('not as administrator'));
     });
+  });
 
-    test('a normal Gandar points at Discord instead', () {
-      final advice = discordPipeRefusedAdvice(path: pipe, elevated: false);
-
-      expect(
-        advice,
-        contains('Discord is most likely running as administrator'),
+  group('when no Discord is running', () {
+    test('a leftover pipe name is named as such', () {
+      final text = advice(
+        elevated: false,
+        pipeOwner: us,
+        discordProcesses: const <DiscordProcessInfo>[],
       );
-      expect(advice, contains('Gandar is not'));
+
+      expect(text, contains('no Discord process is running'));
+      expect(text, contains('left over'));
+    });
+  });
+
+  group('when Discord is the elevated one', () {
+    test('the fix points at Discord, not at Gandar', () {
+      final text = advice(
+        elevated: false,
+        pipeOwner: us,
+        discordProcesses: <DiscordProcessInfo>[discord(elevated: true)],
+      );
+
+      expect(text, contains('Discord is running as administrator'));
+      expect(text, contains('Gandar is not'));
+      expect(text, contains('Start Discord normally'));
       expect(
-        advice,
+        text,
         isNot(contains('Gandar is running as administrator')),
         reason: 'this Gandar is not elevated, and saying so would be wrong',
       );
-      expect(advice, contains('Start Discord normally'));
     });
+  });
 
-    test('an unknown answer admits it rather than picking a side', () {
-      final advice = discordPipeRefusedAdvice(path: pipe, elevated: null);
+  group('when Gandar is the elevated one', () {
+    test('it does not blame elevation, because that is not the cause', () {
+      final text = advice(
+        elevated: true,
+        pipeOwner: us,
+        discordProcesses: <DiscordProcessInfo>[discord(elevated: false)],
+      );
 
-      expect(advice, contains('One of the two is running as administrator'));
-      expect(advice, isNot(contains('most likely')));
+      expect(text, contains('Gandar is running as administrator'));
+      expect(text, contains('Discord is not elevated'));
       expect(
-        advice,
+        text,
+        contains('that is not the usual reason'),
+        reason: 'an elevated program can write to an ordinary one’s pipe',
+      );
+      expect(
+        text,
+        isNot(contains('Close Gandar and open it normally')),
+        reason: 'that advice was measured to be based on a false premise',
+      );
+      expect(
+        text,
+        contains('restarting Discord'),
+        reason: 'restarting the client is what actually helps',
+      );
+    });
+  });
+
+  group('when neither is elevated', () {
+    test('it says plainly that this is not an administrator problem', () {
+      final text = advice(
+        elevated: false,
+        pipeOwner: us,
+        discordProcesses: <DiscordProcessInfo>[discord(elevated: false)],
+      );
+
+      expect(text, contains('not an administrator problem at all'));
+      expect(text, contains('Quit Discord completely'));
+      expect(text, contains('endpoint-security'));
+      expect(text, isNot(contains('most likely')));
+    });
+  });
+
+  group('when nothing could be measured', () {
+    test('it admits it rather than picking a side', () {
+      final text = advice(elevated: null, discordProcesses: null);
+
+      expect(text, contains('would not say which program is the problem'));
+      expect(
+        text,
         isNot(contains('Gandar is running as administrator')),
         reason: 'nothing was measured, so nothing may be asserted',
       );
-      expect(advice, contains('Start both the same way'));
-      expect(
-        advice,
-        isNot(contains('open it normally')),
-        reason: 'the wrong side must not be named when neither was measured',
-      );
+      expect(text, isNot(contains('Discord is running as administrator')));
     });
 
-    test('every answer says the problem is not Gandar\'s to fix', () {
-      for (final elevated in <bool?>[true, false, null]) {
-        final advice = discordPipeRefusedAdvice(path: pipe, elevated: elevated);
-        expect(advice, contains('nothing to fix in Gandar'));
-      }
+    test('a pipe it could not read the owner of is not called another account',
+        () {
+      final text = advice(
+        elevated: false,
+        pipeOwner: null,
+        discordProcesses: <DiscordProcessInfo>[discord(elevated: false)],
+      );
+      expect(text, isNot(contains('different Windows account')));
     });
+  });
+
+  test('every answer says Discord is optional', () {
+    for (final text in <String>[
+      advice(elevated: true, pipeOwner: them, ourSid: us),
+      advice(elevated: false, discordProcesses: const <DiscordProcessInfo>[]),
+      advice(elevated: false, discordProcesses: <DiscordProcessInfo>[discord(elevated: true)]),
+      advice(elevated: true, discordProcesses: <DiscordProcessInfo>[discord(elevated: false)]),
+      advice(elevated: false, discordProcesses: <DiscordProcessInfo>[discord(elevated: false)]),
+      advice(elevated: null, discordProcesses: null),
+    ]) {
+      expect(text, contains('optional extra'));
+      expect(text, contains(pipe));
+    }
   });
 }

@@ -61,6 +61,19 @@ class AppDirectory {
     return directory;
   }
 
+  /// Where exported mixes are written: `<data>/exports`.
+  ///
+  /// Its own folder rather than somewhere the user has to be told about, because
+  /// an export is a file they will want to move, copy or open in an editor — and
+  /// a file in the middle of an app's internal data is one they would have to go
+  /// looking for.
+  static Future<Directory> exportsDirectory() async {
+    final root = await support();
+    final directory = Directory(p.join(root.path, 'exports'));
+    await directory.create(recursive: true);
+    return directory;
+  }
+
   /// The places worth trying, in order of preference.
   static Future<List<Directory>> candidates() async {
     final out = <Directory>[];
