@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/errors/failure_text.dart';
 import '../core/theme/theme_engine.dart';
+import '../core/theme/theme_tokens.dart';
 import '../domain/models/track.dart';
 
 /// A section title with an optional trailing action.
@@ -134,6 +135,7 @@ class TrackTile extends StatelessWidget {
     this.isCurrent = false,
     this.subtitle,
     this.dense = false,
+    this.onArtistTap,
   });
 
   final Track track;
@@ -143,6 +145,15 @@ class TrackTile extends StatelessWidget {
   final bool isCurrent;
   final String? subtitle;
   final bool dense;
+
+  /// Where the artist line leads, when the caller wants it to lead anywhere.
+  ///
+  /// The whole line is one target and it opens the track's *first* artist. A
+  /// row is a row: giving every guest their own hit area would make a tile's
+  /// tap regions depend on how many people sang on it. Null — and a caller who
+  /// passed their own [subtitle] — leaves the line as plain text, because
+  /// there is then nothing truthful to open.
+  final void Function(String artist)? onArtistTap;
 
   @override
   Widget build(BuildContext context) {
@@ -162,13 +173,39 @@ class TrackTile extends StatelessWidget {
           color: isCurrent ? tokens.accentColor : tokens.textPrimaryColor,
         ),
       ),
-      subtitle: Text(
-        subtitle ?? track.artists.join(', '),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.bodySmall,
-      ),
+      subtitle: _subtitle(theme, tokens),
       trailing: trailing,
+    );
+  }
+
+  Widget _subtitle(ThemeData theme, ThemeTokens tokens) {
+    final style = theme.textTheme.bodySmall;
+    final label = subtitle ?? track.artists.join(', ');
+    final text = Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: style,
+    );
+
+    final tap = onArtistTap;
+    final artist = track.primaryArtist.trim();
+    if (tap == null || subtitle != null || artist.isEmpty) return text;
+
+    return InkWell(
+      onTap: () => tap(artist),
+      borderRadius: BorderRadius.circular(tokens.radiusSm),
+      child: Tooltip(
+        message: 'Show everything by $artist',
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          // Coloured, because nothing else tells a row's second line apart
+          // from a row's second line that goes nowhere.
+          style: style?.copyWith(color: tokens.accentColor),
+        ),
+      ),
     );
   }
 }
@@ -244,7 +281,10 @@ class SettingSliderTile extends StatelessWidget {
   final double min;
   final double max;
   final int? divisions;
-  final ValueChanged<double> onChanged;
+
+  /// Null greys the handle out, for a setting whose range is currently empty —
+  /// a slice already at its shortest has nowhere to move its start.
+  final ValueChanged<double>? onChanged;
   final String Function(double)? valueLabel;
 
   @override
@@ -288,33 +328,82 @@ Future<String?> promptForName(
   String initial = '',
   String? hint,
 }) async {
-  final controller = TextEditingController(text: initial);
   final result = await showDialog<String>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: Text(title),
+    builder: (_) => _NameDialog(
+      title: title,
+      action: action,
+      initial: initial,
+      hint: hint,
+    ),
+  );
+  final trimmed = result?.trim();
+  return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+}
+
+/// The dialog a name is typed into, which owns its own text controller.
+///
+/// Owning it here rather than in [promptForName] is not tidiness. Disposing the
+/// controller as soon as `showDialog` returns is too early: the dialog is still
+/// animating out and rebuilds its field on the way, so the next frame uses a
+/// disposed controller — a framework assertion in the app, and in a test a
+/// poisoned tree that fails whatever runs next.
+class _NameDialog extends StatefulWidget {
+  const _NameDialog({
+    required this.title,
+    required this.action,
+    required this.initial,
+    this.hint,
+  });
+
+  final String title;
+  final String action;
+  final String initial;
+  final String? hint;
+
+  @override
+  State<_NameDialog> createState() => _NameDialogState();
+}
+
+class _NameDialogState extends State<_NameDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initial,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit(String? value) => Navigator.of(context).pop(value);
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
       content: TextField(
-        controller: controller,
+        controller: _controller,
         autofocus: true,
         textCapitalization: TextCapitalization.sentences,
-        decoration: InputDecoration(labelText: 'Name', hintText: hint),
-        onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        decoration: InputDecoration(
+          labelText: 'Name',
+          hintText: widget.hint,
+        ),
+        onSubmitted: _submit,
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(),
+          onPressed: () => _submit(null),
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-          child: Text(action),
+          onPressed: () => _submit(_controller.text),
+          child: Text(widget.action),
         ),
       ],
-    ),
-  );
-  controller.dispose();
-  final trimmed = result?.trim();
-  return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+    );
+  }
 }
 
 /// Centered empty/error placeholder.

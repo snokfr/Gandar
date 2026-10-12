@@ -55,4 +55,22 @@ void main() {
   test('a playlist opens under the playlists route', () {
     expect(match('/playlists/abc123').matches, isNotEmpty);
   });
+
+  test('an artist opens by name, and a name with a slash stays one name', () {
+    final artist = match('/artists/Ariana%20Grande');
+    expect(artist.matches, isNotEmpty);
+    expect(
+      artist.matches.whereType<ShellRouteMatch>(),
+      isNotEmpty,
+      reason: 'an artist page is still a screen inside the shell',
+    );
+
+    // AC/DC, and any other name with a slash in it, is one path segment — a
+    // route that split it would open an artist called "AC".
+    expect(match('/artists/AC%2FDC').matches, isNotEmpty);
+    expect(match('/artists/AC%2FDC').uri.pathSegments, <String>[
+      'artists',
+      'AC/DC',
+    ]);
+  });
 }

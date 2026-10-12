@@ -196,3 +196,41 @@ reports every frame Discord sent back. It is skipped by default because it needs
 Discord open and signed in — and note that **a Discord client showing an error
 screen still accepts connections and then never answers the handshake**, which
 is the failure this test was built to tell apart from a protocol bug.
+
+## Checked against Discord's own documentation
+
+This client is written to the published protocol rather than to remembered
+tribal knowledge, so here is what was read and what it says, point by point.
+Sources: [Discord RPC](https://docs.discord.com/developers/topics/rpc),
+[Rich Presence](https://docs.discord.com/developers/platform/rich-presence),
+and Discord's own implementation notes,
+[discord-rpc: hard mode](https://github.com/discord/discord-rpc/blob/master/documentation/hard-mode.md).
+
+| What the docs say | What Gandar does |
+| --- | --- |
+| The pipe is `\\?\pipe\discord-ipc-{n}`, and *n* runs **0 to 9** — "Discord can be on any pipe ranging from discord-ipc-0 to discord-ipc-9" | `discordPipeCandidates()` tries exactly `0…9` on Windows, in order, and takes the first that opens |
+| The header is **two little-endian unsigned 32-bit integers**: the opcode, then the payload length in **bytes** | `encodeDiscordFrame` writes opcode and `body.length` with `Endian.little`, over UTF-8 bytes |
+| "The pipe expects for frames to be written in a single byte array" | One `write` of the header and payload together |
+| A session begins with a **HANDSHAKE (opcode 0)** carrying the RPC version and the application's client id | `{'v': 1, 'client_id': clientId}` |
+| Discord answers the handshake with a **FRAME (opcode 1)** containing `READY` | The handshake future completes on the `READY` event, and times out with a sentence rather than hanging |
+| Commands and events travel as **FRAME** payloads, with a `nonce` used to match a reply to its request | `send()` puts a nonce on the command and completes the waiting future when that nonce comes back |
+| PING (3) must be answered, and CLOSE (2) means the session is over | Both handled in `_dispatch` |
+
+### The one thing the documentation does not settle
+
+The pipe being refused with **Win32 error 5** is an integrity-level problem, not
+an account problem: two programs from the same user cannot talk through a named
+pipe when one is elevated and the other is not. Microsoft documents the general
+rule — access to both ends of a named pipe is decided by the pipe's security
+descriptor and the caller's token
+([Named Pipe Security and Access Rights](https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-security-and-access-rights))
+— but Discord does not publish the descriptor its client creates, and the
+"both must match" behaviour is reported by users rather than guaranteed in any
+Discord document.
+
+So Gandar measures **its own** elevation (`isRunningElevated()`, via
+`TokenElevation`) and reports only that. It cannot read Discord's, and the
+message says so instead of asserting which side is high. The remedy it names is
+the one that is in this app's control: **start Gandar normally** — or, if you
+want both elevated, start Discord as administrator as well and restart Gandar
+so the two match.

@@ -183,6 +183,20 @@ class _DiscordCardState extends ConsumerState<DiscordCard> {
               ),
             ),
           ],
+
+          // Most Discord problems are solved by changing something outside
+          // this app — starting Discord, or starting it the same way Gandar
+          // was started. The automatic retry backs off, so without this button
+          // the wait after fixing it is the app's, not the user's.
+          if (discord.status == DiscordStatus.failed) ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () =>
+                  ref.read(discordPresenceProvider.notifier).retry(),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try again'),
+            ),
+          ],
         ],
       ),
     );

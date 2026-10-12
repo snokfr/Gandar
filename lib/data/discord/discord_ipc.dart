@@ -163,6 +163,9 @@ class _Kernel32 {
     getLastError = _lib.lookupFunction<Uint32 Function(), int Function()>(
       'GetLastError',
     );
+    getCurrentProcess = _lib.lookupFunction<IntPtr Function(), int Function()>(
+      'GetCurrentProcess',
+    );
   }
 
   final DynamicLibrary _lib;
@@ -197,6 +200,9 @@ class _Kernel32 {
   late final int Function(Pointer<Utf16>, int) waitNamedPipe;
   late final int Function() getLastError;
 
+  /// The pseudo-handle for this process. It never needs closing.
+  late final int Function() getCurrentProcess;
+
   static _Kernel32? _instance;
 
   /// Loaded on demand, and only on Windows.
@@ -220,6 +226,137 @@ class _Kernel32 {
   /// Discord's own pipe is refused to a process on the wrong side of that line,
   /// which surfaces here as a bare 5.
   static const int errorAccessDenied = 5;
+}
+
+/// `advapi32.dll`, for asking whether this process is elevated.
+///
+/// Loaded the same lazy way as [_Kernel32], and only on Windows.
+class _Advapi32 {
+  _Advapi32(this._lib) {
+    openProcessToken = _lib
+        .lookupFunction<
+          Int32 Function(IntPtr, Uint32, Pointer<IntPtr>),
+          int Function(int, int, Pointer<IntPtr>)
+        >('OpenProcessToken');
+    getTokenInformation = _lib
+        .lookupFunction<
+          Int32 Function(IntPtr, Int32, Pointer<Void>, Uint32, Pointer<Uint32>),
+          int Function(int, int, Pointer<Void>, int, Pointer<Uint32>)
+        >('GetTokenInformation');
+  }
+
+  final DynamicLibrary _lib;
+  late final int Function(int, int, Pointer<IntPtr>) openProcessToken;
+  late final int Function(int, int, Pointer<Void>, int, Pointer<Uint32>)
+  getTokenInformation;
+
+  static _Advapi32? _instance;
+
+  static _Advapi32 get instance =>
+      _instance ??= _Advapi32(DynamicLibrary.open('advapi32.dll'));
+
+  /// `TOKEN_QUERY`, the only access [isRunningElevated] needs.
+  static const int tokenQuery = 0x0008;
+
+  /// `TokenElevation`. Its answer is one `DWORD`: non-zero means elevated.
+  static const int tokenElevation = 20;
+}
+
+/// Whether this process is running elevated, or null when that cannot be told
+/// (anywhere but Windows, or if Windows refuses the question).
+///
+/// This exists because "access denied" on Discord's pipe is not about the user
+/// account — the same user's processes cannot talk through a named pipe when
+/// one is elevated and the other is not — and the advice that fixes it depends
+/// on which side Gandar is on. Guessing that wrong sends someone to change the
+/// wrong program.
+bool? isRunningElevated() {
+  if (!Platform.isWindows) return null;
+  try {
+    final kernel32 = _Kernel32.instance;
+    final advapi32 = _Advapi32.instance;
+    final token = calloc<IntPtr>();
+    try {
+      if (advapi32.openProcessToken(
+            kernel32.getCurrentProcess(),
+            _Advapi32.tokenQuery,
+            token,
+          ) ==
+          0) {
+        return null;
+      }
+      final value = calloc<Uint32>();
+      final written = calloc<Uint32>();
+      try {
+        if (advapi32.getTokenInformation(
+              token.value,
+              _Advapi32.tokenElevation,
+              value.cast(),
+              sizeOf<Uint32>(),
+              written,
+            ) ==
+            0) {
+          return null;
+        }
+        return value.value != 0;
+      } finally {
+        calloc.free(value);
+        calloc.free(written);
+      }
+    } finally {
+      if (token.value != 0) kernel32.closeHandle(token.value);
+      calloc.free(token);
+    }
+  } catch (_) {
+    // A missing dll or a refused token is not worth an exception on the path
+    // to drawing a settings screen; "unknown" is already handled everywhere.
+    return null;
+  }
+}
+
+/// What to tell someone whose Discord pipe exists but was refused.
+///
+/// Pure, so the three ways round — Gandar elevated, Discord elevated, or no
+/// idea — are tested without a pipe, an administrator, or a second process.
+/// [elevated] is the answer from [isRunningElevated].
+String discordPipeRefusedAdvice({
+  required String path,
+  required bool? elevated,
+}) {
+  // What is measured and what is inferred are kept apart here. Gandar's own
+  // level is a fact this process can read; Discord's is not, and claiming it
+  // would be inventing the one thing the reader needs to be true. Windows'
+  // documented rule is about the security descriptor of the pipe and the
+  // token of the caller, which is why the level has to match — but which side
+  // is high is only known on Gandar's side.
+  final which = switch (elevated) {
+    true =>
+      'Gandar is running as administrator. A pipe is only open to a program '
+          'at the same level as the one that made it, and Discord\u2019s own '
+          'level cannot be read from here',
+    false =>
+      'Discord is most likely running as administrator and Gandar is not, so '
+          'Windows will not let them talk to each other',
+    null =>
+      'One of the two is running as administrator and the other is not, so '
+          'Windows will not let them talk to each other',
+  };
+  // The remedy is spelled out, because "start both the same way" is only
+  // advice if you already know which way each one went. When Gandar is the
+  // elevated one, the ordinary way to match is to stop elevating *Gandar*:
+  // starting Discord as administrator as well works, but it is not the thing
+  // to suggest first.
+  final fix = switch (elevated) {
+    true =>
+      'Close Gandar and open it normally (not as administrator), or start '
+          'Discord as administrator as well, so both are the same',
+    false =>
+      'Start Discord normally, or start Gandar as administrator as well, so '
+          'both are the same',
+    null => 'Start both the same way (normally is best) and it will connect',
+  };
+  return '$path exists but refuses Gandar — $which. $fix. There is nothing '
+      'to fix in Gandar: this is Windows keeping two programs apart.';
 }
 
 /// A `CreateFileW` failure, with the code so the caller can tell "nothing
@@ -417,6 +554,7 @@ List<String> discordPipeCandidates() {
 /// rather than pretending Discord is absent.
 Future<DiscordTransport> openDiscordTransport({
   List<String>? candidates,
+  bool? elevated,
 }) async {
   if (!Platform.isWindows) {
     throw DiscordUnavailable(
@@ -435,14 +573,16 @@ Future<DiscordTransport> openDiscordTransport({
       // way to see why a pipe that does exist refused to open.
       if (failure.error == _Kernel32.errorAccessDenied) {
         // A raw "Win32 error 5" reads as a bug in Gandar. It is not: it means
-        // Discord is running with different privileges from this app, and
-        // Windows will not let the two talk. Saying which way round it usually
-        // is, and what to do, is the difference between a dead end and a fix.
+        // this app and Discord are on opposite sides of an integrity boundary,
+        // and Windows will not let them talk. Which way round that is changes
+        // what helps, so it is asked of the process rather than assumed — the
+        // one thing this message must not do is send someone to change the
+        // wrong program.
         broken.add(
-          '${failure.path} exists but refuses Gandar. This normally means '
-          'Gandar and Discord are running with different privileges — most '
-          'often Discord as administrator and Gandar not. Start both the same '
-          'way (normally is best) and it will connect.',
+          discordPipeRefusedAdvice(
+            path: failure.path,
+            elevated: elevated ?? isRunningElevated(),
+          ),
         );
       } else if (failure.error != _Kernel32.errorFileNotFound) {
         broken.add(

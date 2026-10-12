@@ -26,6 +26,16 @@ abstract class AudioEngine {
   Future<void> seek(Duration position);
   Future<void> setVolume(double volume0to1);
 
+  /// Tells the engine to stop itself once it reaches [position] in the source,
+  /// or to run to the end when [position] is null.
+  ///
+  /// This is how a mashup part is trimmed to the slice the user chose. It is a
+  /// player option rather than a filter because the bundled libmpv has no
+  /// `atrim` to trim with (see `tool/mashup_probe.dart`), and because the cut is
+  /// then the engine's own business: the part stops where it was told to even
+  /// if nothing is watching its clock.
+  Future<void> stopAt(Duration? position);
+
   /// Applies EQ / normalization / mono filters. No-op on engines that cannot
   /// support them (e.g. the fake).
   Future<void> applyFilters(PlaybackSettings settings);
@@ -47,6 +57,18 @@ class FakeAudioEngine implements AudioEngine {
 
   /// Records the last filter string applied, for assertions.
   PlaybackSettings? lastAppliedFilters;
+
+  /// Every trim asked for through [stopAt], in order, for assertions.
+  final List<Duration?> trims = <Duration?>[];
+
+  /// Every position passed to [seek], in order, for assertions.
+  final List<Duration> seeks = <Duration>[];
+
+  /// Every level passed to [setVolume], in order, for assertions.
+  final List<double> volumes = <double>[];
+
+  /// Trims this engine has been asked for, most recent last.
+  Duration? get trim => trims.isEmpty ? null : trims.last;
 
   /// Records every URL passed to [load].
   final List<String> loadedUrls = <String>[];
@@ -105,11 +127,19 @@ class FakeAudioEngine implements AudioEngine {
   @override
   Future<void> seek(Duration position) async {
     _position = position;
+    seeks.add(position);
     _positionController.add(position);
   }
 
   @override
-  Future<void> setVolume(double volume0to1) async {}
+  Future<void> setVolume(double volume0to1) async {
+    volumes.add(volume0to1);
+  }
+
+  @override
+  Future<void> stopAt(Duration? position) async {
+    trims.add(position);
+  }
 
   @override
   Future<void> applyFilters(PlaybackSettings settings) async {
@@ -129,6 +159,9 @@ class FakeAudioEngine implements AudioEngine {
     _position = position;
     _positionController.add(position);
   }
+
+  /// Test helper: pretend the engine reached the trim it was given.
+  void emitTrimReached() => _emit(EngineState.completed);
 
   /// Test helper: report the loaded media's duration.
   void emitDuration(Duration duration) {

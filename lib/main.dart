@@ -119,6 +119,9 @@ Future<void> main() async {
 
       final database = AppDatabase();
       final audioEngine = MediaKitAudioEngine(temp: playbackTemp);
+      // A mashup layer is another player of the same kind, writing its playlist
+      // to the same proven-writable directory as the main one.
+      MediaKitAudioEngine mixEngine() => MediaKitAudioEngine(temp: playbackTemp);
 
       final dependencies = await log.time(
         'startup',
@@ -127,6 +130,7 @@ Future<void> main() async {
           database: database,
           settingsRepository: settingsRepository,
           audioEngine: audioEngine,
+          createMixEngine: mixEngine,
         ),
       );
 

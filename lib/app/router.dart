@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 
 import '../features/albums/albums_page.dart';
+import '../features/artists/artist_page.dart';
 import '../features/feed/feed_page.dart';
 import '../features/import/import_page.dart';
 import '../features/library/library_page.dart';
@@ -44,6 +45,14 @@ GoRouter buildRouter() {
                     AlbumDetailPage(albumId: state.pathParameters['id']!),
               ),
             ],
+          ),
+          // One route, with the name in the path. There is no artist index to
+          // land on, and a parent route without a builder of its own is an
+          // assertion at startup, not a shortcut.
+          GoRoute(
+            path: '/artists/:name',
+            builder: (context, state) =>
+                ArtistPage(artistName: state.pathParameters['name'] ?? ''),
           ),
           GoRoute(path: '/feed', builder: (context, state) => const FeedPage()),
           GoRoute(

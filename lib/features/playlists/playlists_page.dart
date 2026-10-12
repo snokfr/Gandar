@@ -7,6 +7,7 @@ import '../../domain/models/playlist.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
 import '../../widgets/track_picker.dart';
+import '../artists/artist_page.dart';
 
 /// Lists the playlists in Gandar: the ones made here, and the ones imported
 /// from a Spotify link or an exported file. Both are editable and deletable.
@@ -387,6 +388,8 @@ class PlaylistDetailPage extends ConsumerWidget {
                                   tracks,
                                   startTrackId: track.id,
                                 ),
+                                onArtistTap: (artist) =>
+                                    openArtist(context, artist),
                                 trailing: IconButton(
                                   tooltip: 'Remove from this playlist',
                                   icon: const Icon(Icons.remove_circle_outline),

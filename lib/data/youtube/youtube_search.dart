@@ -1,6 +1,7 @@
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 import '../../core/logging/app_logger.dart';
+import '../../domain/models/track.dart';
 import '../net/request_gate.dart';
 
 /// One YouTube video, enough to show a row and start playback.
@@ -31,6 +32,23 @@ class YouTubeVideo {
   String get trackId => '$youTubeTrackPrefix$videoId';
 
   String get url => 'https://www.youtube.com/watch?v=$videoId';
+
+  /// The app's own track model for this video, so a result can be queued,
+  /// played, recorded in history and crossfaded like anything else.
+  ///
+  /// Lives here rather than at each screen that shows results: two call sites
+  /// building this by hand is two chances for one of them to forget the
+  /// `youtube:` prefix, which is the difference between playing this video and
+  /// searching YouTube for its title again.
+  Track toTrack() => Track(
+    id: trackId,
+    title: title,
+    artists: <String>[
+      if (author != null && author!.isNotEmpty) author! else 'YouTube',
+    ],
+    durationMs: duration?.inMilliseconds ?? 0,
+    artworkUrl: thumbnailUrl,
+  );
 
   @override
   String toString() => 'YouTubeVideo($videoId, $title)';

@@ -13,6 +13,7 @@ import '../data/usage/app_usage.dart';
 import '../data/youtube/youtube_explode_resolver.dart';
 import '../domain/repositories/repositories.dart';
 import '../playback/audio_engine/audio_engine.dart';
+import '../playback/audio_engine/media_kit_audio_engine.dart';
 import '../playback/preloader.dart';
 import '../playback/queue/shuffle.dart';
 import 'playback_controller.dart';
@@ -38,6 +39,7 @@ class AppDependencies {
     required this.cacheManager,
     required this.audioResolver,
     required this.audioEngine,
+    required this.createMixEngine,
     required this.playbackController,
     required this.appUsage,
     this.logLevel = LogLevel.info,
@@ -55,6 +57,15 @@ class AppDependencies {
   final CacheManager cacheManager;
   final AudioResolver audioResolver;
   final AudioEngine audioEngine;
+
+  /// Builds an extra player for one layer of a mashup.
+  ///
+  /// A mashup needs one player per part — the bundled libmpv has no `amix` to
+  /// sum two sources with — so this is the only place that knows how to make
+  /// another one. It is a factory rather than a list so a mix of six parts does
+  /// not hold six idle players open the rest of the time.
+  final AudioEngine Function() createMixEngine;
+
   final PlaybackController playbackController;
 
   /// How long the app has been open, this run and ever.
@@ -68,6 +79,7 @@ class AppDependencies {
     required AppDatabase database,
     required SettingsRepository settingsRepository,
     required AudioEngine audioEngine,
+    AudioEngine Function()? createMixEngine,
   }) async {
     // Apply the saved log level before anything noisy happens.
     final savedLevel = LogLevel.byName(
@@ -142,6 +154,7 @@ class AppDependencies {
       cacheManager: cacheManager,
       audioResolver: resolver,
       audioEngine: audioEngine,
+      createMixEngine: createMixEngine ?? MediaKitAudioEngine.new,
       playbackController: controller,
       appUsage: appUsage,
       logLevel: AppLogger.instance.minLevel,

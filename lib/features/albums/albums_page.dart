@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/errors/failure_text.dart';
+import '../../core/theme/theme_engine.dart';
 import '../../domain/models/album.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
+import '../artists/artist_page.dart';
 
 /// The library, filed by album.
 ///
@@ -206,16 +208,23 @@ class AlbumDetailPage extends ConsumerWidget {
                                 ),
                                 if (album.artist.isNotEmpty) ...[
                                   const SizedBox(height: 4),
-                                  Text(
-                                    album.artist,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium
-                                        ?.copyWith(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurfaceVariant,
-                                        ),
+                                  // The album's artist is the way from a record
+                                  // to everything else the library has by them.
+                                  InkWell(
+                                    onTap: () =>
+                                        openArtist(context, album.artist),
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Text(
+                                      album.artist,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            color: context
+                                                .gandarTokens
+                                                .accentColor,
+                                          ),
+                                    ),
                                   ),
                                 ],
                                 const SizedBox(height: 4),
@@ -251,6 +260,7 @@ class AlbumDetailPage extends ConsumerWidget {
                             album.tracks,
                             startTrackId: track.id,
                           ),
+                          onArtistTap: (artist) => openArtist(context, artist),
                         );
                       },
                     ),

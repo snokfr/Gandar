@@ -73,6 +73,7 @@ class _NoopResolver implements AudioResolver {
     cacheManager: CacheManager(repository: DriftCacheRepository(database)),
     audioResolver: resolver,
     audioEngine: FakeAudioEngine(),
+    createMixEngine: FakeAudioEngine.new,
     appUsage: AppUsageTracker(store: InMemoryStore()),
     playbackController: PlaybackController(
       engine: FakeAudioEngine(),

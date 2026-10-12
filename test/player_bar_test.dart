@@ -70,6 +70,7 @@ class _StubResolver implements AudioResolver {
     cacheManager: CacheManager(repository: DriftCacheRepository(database)),
     audioResolver: resolver,
     audioEngine: FakeAudioEngine(),
+    createMixEngine: FakeAudioEngine.new,
     playbackController: controller,
     appUsage: AppUsageTracker(store: InMemoryStore()),
   );

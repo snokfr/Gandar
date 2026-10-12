@@ -9,6 +9,7 @@ import '../../domain/models/playlist.dart';
 import '../../domain/models/track.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
+import '../artists/artist_page.dart';
 import '../player/player_surface.dart' show formatDuration;
 
 /// Searches every source at once:
@@ -209,6 +210,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 ? null
                 : '$subtitleLabel · ${track.artists.join(', ')}',
             onTap: () => onPlay(track),
+            // Only when the second line really is the artist. With a playlist
+            // label in front of it the line means two things, and a tap would
+            // have to guess which one was meant.
+            onArtistTap: subtitleLabel == null
+                ? (artist) => openArtist(context, artist)
+                : null,
           ),
       ],
     );
@@ -324,14 +331,3 @@ class _VideoRow extends StatelessWidget {
   }
 }
 
-/// Adapts a YouTube result into the app's track model so playback, history and
-/// crossfade all work unchanged.
-extension on YouTubeVideo {
-  Track toTrack() => Track(
-    id: trackId,
-    title: title,
-    artists: [if (author != null && author!.isNotEmpty) author! else 'YouTube'],
-    durationMs: duration?.inMilliseconds ?? 0,
-    artworkUrl: thumbnailUrl,
-  );
-}

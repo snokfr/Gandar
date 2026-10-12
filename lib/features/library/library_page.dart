@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/errors/failure_text.dart';
+import '../../core/theme/theme_engine.dart';
 import '../../domain/models/track.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
+import '../artists/artist_page.dart';
 import 'liked_songs_controller.dart';
 
 /// The library, in the order a person looks for things: what they played last,
@@ -119,6 +121,7 @@ class LibraryPage extends ConsumerWidget {
                             tracks,
                             startTrackId: track.id,
                           ),
+                          onArtistTap: (artist) => openArtist(context, artist),
                           trailing: _LikeButton(track: track),
                         );
                       },
@@ -209,12 +212,21 @@ class _RecentRow extends StatelessWidget {
                                 : FontWeight.w400,
                           ),
                         ),
-                        Text(
-                          track.primaryArtist,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
+                        // Tappable for the same reason the list's artist line
+                        // is: this shelf names one artist per card, so the name
+                        // is the way into everything else they have here.
+                        InkWell(
+                          onTap: track.primaryArtist.trim().isEmpty
+                              ? null
+                              : () => openArtist(context, track.primaryArtist),
+                          borderRadius: BorderRadius.circular(6),
+                          child: Text(
+                            track.primaryArtist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: context.gandarTokens.accentColor,
+                            ),
                           ),
                         ),
                       ],

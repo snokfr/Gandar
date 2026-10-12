@@ -183,6 +183,18 @@ class MediaKitAudioEngine implements AudioEngine {
       _player.setVolume(volume0to1.clamp(0.0, 1.0).toDouble() * 100);
 
   @override
+  Future<void> stopAt(Duration? position) async {
+    final platform = _player.platform;
+    if (platform is! NativePlayer) return;
+    // mpv's own `end`: the player stops there and reports completion, so a
+    // trimmed part ends on its own rather than because a timer said so.
+    await platform.setProperty(
+      'end',
+      position == null ? 'no' : (position.inMilliseconds / 1000).toString(),
+    );
+  }
+
+  @override
   Future<void> applyFilters(PlaybackSettings settings) async {
     final af = AudioFilters.buildAf(settings);
     final platform = _player.platform;

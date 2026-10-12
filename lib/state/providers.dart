@@ -13,16 +13,19 @@ import '../data/discord/discord_presence.dart';
 import '../data/feed/artist_feed.dart';
 import '../data/import/library_file_import.dart';
 import '../data/lyrics/lyrics_source.dart';
+import '../data/mashup/mashup_store.dart';
 import '../data/net/request_gate.dart';
 import '../data/spotify/spotify_public.dart';
 import '../data/spotify/spotify_public_web.dart';
 import '../data/usage/app_usage.dart';
 import '../data/youtube/youtube_search.dart';
 import '../domain/models/album.dart';
+import '../domain/models/artist.dart';
 import '../domain/models/listening_stats.dart';
 import '../domain/models/playlist.dart';
 import '../domain/models/track.dart';
 import 'app_dependencies.dart';
+import 'mashup_controller.dart';
 import 'playback_controller.dart';
 
 /// Overridden in `main()` with the bootstrapped dependency graph.
@@ -149,6 +152,43 @@ final albumsProvider = FutureProvider<List<Album>>((ref) async {
   return Album.group(tracks);
 });
 
+/// Where named mashups are written and read from.
+final mashupStoreProvider = Provider<MashupStore>((ref) => MashupStore());
+
+/// The mashup screen's arrangement and players.
+///
+/// Deliberately a plain provider kept for the life of the app: the mix has to
+/// survive leaving the tab and coming back, which is the whole reason this is
+/// not state inside the page. See [MashupController].
+final mashupControllerProvider = Provider<MashupController>((ref) {
+  final deps = ref.watch(appDependenciesProvider);
+  final controller = MashupController(
+    createEngine: deps.createMixEngine,
+    resolve: deps.audioResolver.resolve,
+    settings: () => ref.read(playbackSettingsProvider),
+    masterVolume: () => ref.read(playbackControllerProvider).volume,
+    store: ref.watch(mashupStoreProvider),
+  );
+  ref.onDispose(controller.dispose);
+  return controller;
+});
+
+/// The mashups saved on disk. Invalidated after a save or a delete.
+final savedMashupsProvider = FutureProvider<List<SavedMashup>>(
+  (ref) => ref.watch(mashupStoreProvider).list(),
+);
+
+/// Everything the library holds by one artist.
+///
+/// Built from the same rows every other screen shows, so an artist page cannot
+/// claim something the library does not have. The name comes from the route —
+/// there is no artist id to carry — and the model fixes the spelling up from
+/// the tracks themselves.
+final artistProvider = FutureProvider.family<Artist, String>((ref, name) async {
+  final tracks = await ref.watch(likedTracksProvider.future);
+  return Artist.of(tracks, name);
+});
+
 /// How many recent tracks the library shows before "all of it".
 const int recentTracksShown = 20;
 
@@ -203,6 +243,20 @@ final youTubeSearchProvider = FutureProvider.family<List<YouTubeVideo>, String>(
   (ref, query) async {
     if (query.trim().length < kMinSearchLength) return const <YouTubeVideo>[];
     return ref.watch(youTubeSearcherProvider).search(query, limit: 15);
+  },
+);
+
+/// What YouTube has for one artist, shown as the catalogue on an artist page.
+///
+/// Its own provider rather than a reuse of [youTubeSearchProvider]: this query
+/// is not one the user typed, and a page about an artist wants a longer list
+/// than a search box does. Cached per artist for the session like any other
+/// future provider, so going back to a page does not search again.
+final artistCatalogueProvider = FutureProvider.family<List<YouTubeVideo>, String>(
+  (ref, artist) async {
+    final trimmed = artist.trim();
+    if (trimmed.length < kMinSearchLength) return const <YouTubeVideo>[];
+    return ref.watch(youTubeSearcherProvider).search('$trimmed songs', limit: 30);
   },
 );
 
@@ -687,6 +741,21 @@ class DiscordPresenceController extends Notifier<DiscordState> {
   void _schedule() {
     _debounce?.cancel();
     _debounce = Timer(_debounceDelay, () => unawaited(_sync()));
+  }
+
+  /// Tries to connect again now, instead of waiting out the backoff.
+  ///
+  /// The backoff exists so a machine with no Discord at all is not hammered;
+  /// a person who has just started Discord should not have to sit through it.
+  /// The wait is reset, so a failure after this retries quickly again rather
+  /// than inheriting the grown backoff.
+  void retry() {
+    _reconnect?.cancel();
+    _reconnect = null;
+    _debounce?.cancel();
+    _backoff = DiscordPolicy.initialBackoff;
+    _set(const DiscordState(status: DiscordStatus.connecting));
+    unawaited(_sync());
   }
 
   /// Clears the presence and drops the connection, without touching status.
