@@ -247,15 +247,14 @@ class YoutubeExplodeResolver implements AudioResolver {
       );
     }
 
-    final candidates = await _candidateVideoIds(track);
-    if (candidates.isEmpty) {
-      throw AudioResolutionException('No YouTube match found', track: track);
-    }
-
     final direct = youTubeVideoIdOf(track.id) != null;
     Object? lastError;
     var sawDeadStream = false;
-    for (final videoId in candidates) {
+    var sawCandidate = false;
+    // `await for`, not a collected list: the search inside [candidatesFor] must
+    // not run at all when the stored mapping works, which is most of the time.
+    await for (final videoId in candidatesFor(track)) {
+      sawCandidate = true;
       for (final client in _orderedClients()) {
         for (var attempt = 1; attempt <= attemptsPerClient; attempt++) {
           try {
@@ -298,6 +297,10 @@ class YoutubeExplodeResolver implements AudioResolver {
           }
         }
       }
+    }
+
+    if (!sawCandidate) {
+      throw AudioResolutionException('No YouTube match found', track: track);
     }
 
     if (sawDeadStream) {
@@ -344,24 +347,54 @@ class YoutubeExplodeResolver implements AudioResolver {
     return left;
   }
 
-  /// The cached mapping first (instant path), else fresh search results.
-  Future<List<String>> _candidateVideoIds(Track track) async {
+  /// The video ids worth trying for [track], in the order they are tried.
+  ///
+  /// The stored mapping comes first, because trying it costs no request. It is
+  /// a head start rather than a verdict, though: YouTube can stop serving a
+  /// video that played yesterday — taken down, age-gated, or answered with
+  /// "the page needs to be reloaded" — and while this returned *only* that id,
+  /// there was nothing left to fall back to. The track then failed the same
+  /// way on every retry, for good, with 'no video for this track yielded a
+  /// playable audio stream' naming a video the store had picked itself.
+  ///
+  /// So the search follows the mapping rather than replacing it, and only runs
+  /// when the mapping does not pan out. Whatever does end up playing is saved
+  /// over the stale entry, so a mapping that stops working heals itself on the
+  /// next attempt instead of needing to be deleted by hand.
+  ///
+  /// [search] is a seam for the tests: the order these are tried in decides
+  /// whether a stale mapping is recoverable, and that is worth pinning down
+  /// without YouTube having a say in it.
+  Stream<String> candidatesFor(
+    Track track, {
+    Future<List<String>> Function(String query)? search,
+  }) async* {
     // A track that came from YouTube search already names its video, so there
     // is nothing to search for and nothing to cache.
     final direct = youTubeVideoIdOf(track.id);
-    if (direct != null) return <String>[direct];
+    if (direct != null) {
+      yield direct;
+      return;
+    }
 
     final cached = await mappings.findVideoId(track.id);
-    if (cached != null && cached.isNotEmpty) return <String>[cached];
+    if (cached != null && cached.isNotEmpty) yield cached;
 
     final query = track.searchQuery;
-    if (query.isEmpty) return const <String>[];
+    if (query.isEmpty) return;
 
-    final results = await _yt.search.search(query);
-    return results
-        .take(searchResultLimit)
-        .map((v) => v.id.value)
-        .toList(growable: false);
+    final found = search != null
+        ? await search(query)
+        : (await _yt.search.search(query))
+              .take(searchResultLimit)
+              .map((v) => v.id.value)
+              .toList(growable: false);
+    for (final id in found) {
+      // The stored id was tried first; offering it twice would only spend the
+      // same attempt again.
+      if (id == cached) continue;
+      yield id;
+    }
   }
 
   Future<ResolvedStream> _resolveVideo(

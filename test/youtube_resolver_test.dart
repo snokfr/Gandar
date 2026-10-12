@@ -41,12 +41,36 @@ class _NoMappings implements MappingRepository {
   Future<void> clearMapping(String spotifyTrackId) async {}
 }
 
+/// A store that already has a mapping for every track, the way one does after
+/// a track has played once.
+class _StoredMappings implements MappingRepository {
+  _StoredMappings(this.stored);
+
+  final String? stored;
+
+  @override
+  Future<String?> findVideoId(String spotifyTrackId) async => stored;
+
+  @override
+  Future<void> saveMapping(String spotifyTrackId, String videoId) async {}
+
+  @override
+  Future<void> clearMapping(String spotifyTrackId) async {}
+}
+
 /// A track that names its video, so no search request is made and the only
 /// traffic is the stream request itself.
 final Track _directTrack = Track(
   id: 'youtube:6NHt1ss8PNs',
   title: 'Buddy',
   artists: const <String>['Bobby S.'],
+);
+
+/// A track from the Spotify library, which has to be matched to a video.
+final Track _searchedTrack = Track(
+  id: '7eZXAeqqdLDrAp2MvrPzWn',
+  title: 'stranger',
+  artists: const <String>['Jhené Aiko'],
 );
 
 void main() {
@@ -215,5 +239,109 @@ void main() {
         reason: 'after the cool-down it is worth one more try',
       );
     });
+  });
+
+  group('what a track will try', () {
+    test('a stored mapping first, before spending a search', () async {
+      var searched = false;
+      final resolver = YoutubeExplodeResolver(
+        mappings: _StoredMappings('stored-id'),
+      );
+      addTearDown(resolver.dispose);
+
+      // Taking only the first candidate is the point: a stored mapping that
+      // works must not cost a search request, because searches are what
+      // YouTube rate limits.
+      final first = await resolver
+          .candidatesFor(
+            _searchedTrack,
+            search: (query) async {
+              searched = true;
+              return <String>['found-id'];
+            },
+          )
+          .first;
+
+      expect(first, 'stored-id');
+      expect(
+        searched,
+        isFalse,
+        reason: 'the search should not run until the stored id has failed',
+      );
+    });
+
+    test(
+      'then a fresh search, so a stale mapping cannot end the story',
+      () async {
+        final resolver = YoutubeExplodeResolver(
+          mappings: _StoredMappings('no-longer-playable'),
+        );
+        addTearDown(resolver.dispose);
+
+        final tried = await resolver
+            .candidatesFor(
+              _searchedTrack,
+              search: (query) async => <String>['fresh-1', 'fresh-2'],
+            )
+            .toList();
+
+        expect(
+          tried,
+          <String>['no-longer-playable', 'fresh-1', 'fresh-2'],
+          reason:
+              'one unusable video is worth skipping to the next candidate, and '
+              'the store was the only source of candidates before this',
+        );
+      },
+    );
+
+    test('without offering the stored id twice', () async {
+      final resolver = YoutubeExplodeResolver(
+        mappings: _StoredMappings('same-id'),
+      );
+      addTearDown(resolver.dispose);
+
+      final tried = await resolver
+          .candidatesFor(
+            _searchedTrack,
+            search: (query) async => <String>['same-id', 'other-id'],
+          )
+          .toList();
+
+      expect(tried, <String>['same-id', 'other-id']);
+    });
+
+    test('a search alone when nothing is stored', () async {
+      final resolver = YoutubeExplodeResolver(mappings: _NoMappings());
+      addTearDown(resolver.dispose);
+
+      final tried = await resolver
+          .candidatesFor(
+            _searchedTrack,
+            search: (query) async => <String>['found-1'],
+          )
+          .toList();
+
+      expect(tried, <String>['found-1']);
+    });
+
+    test(
+      'a YouTube track names its own video and searches for nothing',
+      () async {
+        final resolver = YoutubeExplodeResolver(
+          mappings: _StoredMappings('irrelevant'),
+        );
+        addTearDown(resolver.dispose);
+
+        final tried = await resolver
+            .candidatesFor(
+              _directTrack,
+              search: (query) async => fail('no search should be made'),
+            )
+            .toList();
+
+        expect(tried, <String>['6NHt1ss8PNs']);
+      },
+    );
   });
 }
