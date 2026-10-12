@@ -47,6 +47,20 @@ class AppDirectory {
     return _cached = await pick(await candidates());
   }
 
+  /// Where cached audio files live: `<data>/cache`.
+  ///
+  /// Named here, next to the database and the log, so all three cannot drift
+  /// apart — and created on demand, because a cache directory that only exists
+  /// once a track has been downloaded is one fewer thing to get wrong at
+  /// startup.
+  static Future<Directory> cacheDirectory() async {
+    // Not `support`, which would shadow the method being called.
+    final root = await support();
+    final directory = Directory(p.join(root.path, 'cache'));
+    await directory.create(recursive: true);
+    return directory;
+  }
+
   /// The places worth trying, in order of preference.
   static Future<List<Directory>> candidates() async {
     final out = <Directory>[];

@@ -135,7 +135,11 @@ class MediaKitAudioEngine implements AudioEngine {
     Map<String, String> headers = const {},
   }) async {
     _emit(EngineState.loading);
-    _openHost = Uri.tryParse(url)?.host ?? url;
+    // A cached track is a local path, which has no host — and `Uri` reads the
+    // drive letter of `C:\…` as a scheme and reports an empty host, so the
+    // fallback has to catch the empty case and not just the null one.
+    final parsed = Uri.tryParse(url);
+    _openHost = (parsed != null && parsed.host.isNotEmpty) ? parsed.host : url;
     _loadStartedAt = DateTime.now();
     _firstAudioLogged = false;
     AppLogger.instance.debug(

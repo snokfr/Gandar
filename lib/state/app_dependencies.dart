@@ -5,6 +5,7 @@ import '../core/settings/playback_settings.dart';
 import '../core/settings/settings_repository.dart';
 import '../core/theme/theme_presets.dart';
 import '../core/theme/theme_tokens.dart';
+import '../data/cache/audio_cache.dart';
 import '../data/cache/cache_manager.dart';
 import '../data/repositories/local_repositories.dart';
 import '../data/storage/app_database.dart';
@@ -89,7 +90,26 @@ class AppDependencies {
     // frame of the Discord presence and the activity view agree.
     await appUsage.load();
 
-    final resolver = YoutubeExplodeResolver(mappings: mappingRepository);
+    // Cached audio: the resolver writes every track it plays to disk, and the
+    // next play reads it back without touching the network. The limit is
+    // enforced as files arrive, not only at the next launch — a session long
+    // enough to fill the cache should not be the one that discovers it had no
+    // ceiling.
+    final audioCache = AudioCache(
+      repository: cacheRepository,
+      downloader: DioAudioDownloader(),
+      afterStore: () async {
+        await cacheManager.enforceLimits(
+          maxMegabytes: playbackSettings.cacheMaxMegabytes,
+          maxIdleDays: playbackSettings.cacheMaxIdleDays,
+        );
+      },
+    );
+    final resolver = CachedAudioResolver(
+      inner: YoutubeExplodeResolver(mappings: mappingRepository),
+      cache: audioCache,
+      mappings: mappingRepository,
+    );
     final preloader = StreamPreloader(resolver: resolver);
 
     final controller = PlaybackController(
