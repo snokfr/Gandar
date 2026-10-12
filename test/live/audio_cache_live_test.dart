@@ -50,8 +50,14 @@ void main() {
       );
       addTearDown(() async {
         await database.close();
-        if (cacheDirectory.existsSync()) {
+        // Best effort: a download that stalled is still holding its `.part`
+        // file, and a deletion that fails on that would bury the reason the
+        // test failed under a second, unrelated error. A temp directory left
+        // behind costs nothing, and Windows clears it eventually.
+        try {
           cacheDirectory.deleteSync(recursive: true);
+        } on FileSystemException {
+          // Nothing useful to do about it, and nothing depends on it.
         }
       });
 
