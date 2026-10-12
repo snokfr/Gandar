@@ -279,7 +279,7 @@ class YoutubeExplodeResolver implements AudioResolver {
             _noteWorkingClient(client);
             // Cache the mapping so this track resolves instantly next time.
             // A YouTube-origin track already *is* its mapping.
-            if (!direct) await mappings.saveMapping(track.id, videoId);
+            if (!direct) await _rememberMapping(track, videoId);
             return stream;
           } catch (e) {
             lastError = e;
@@ -325,6 +325,30 @@ class YoutubeExplodeResolver implements AudioResolver {
       track: track,
       cause: lastError,
     );
+  }
+
+  /// Stores the Spotify -> YouTube match, reporting a failure rather than
+  /// throwing one.
+  ///
+  /// This is on the playback path but is not part of playing, so it has to be
+  /// survivable: the stream in hand is good and all that is lost is the
+  /// shortcut next time. It used to throw, and the surrounding `catch` could
+  /// only read that as "this client did not work" — so one database hiccup
+  /// (a lock, a read-only file, a full disk) came out as "No video for this
+  /// track yielded a playable audio stream", naming YouTube for something the
+  /// database had done. Nothing played, and nothing was cached either, because
+  /// this line runs before the cache is handed the stream.
+  Future<void> _rememberMapping(Track track, String videoId) async {
+    try {
+      await mappings.saveMapping(track.id, videoId);
+    } catch (e) {
+      AppLogger.instance.warn(
+        'youtube',
+        'could not remember the YouTube match for "${track.title}"; the track '
+            'still plays, it will just be searched for again next time',
+        error: e,
+      );
+    }
   }
 
   /// Records that [client] produced a stream worth playing.

@@ -202,6 +202,24 @@ class PlaybackController extends ChangeNotifier {
   /// — `_playCurrent` never returned, so the error path never ran.
   static const Duration engineLoadTimeout = Duration(seconds: 20);
 
+  /// Records the play, reporting a failure rather than throwing one.
+  ///
+  /// By the time this runs the engine has the stream and the music is already
+  /// on its way out of the speakers, so a history row that cannot be written is
+  /// a missing statistic — not a track that failed to play. Letting it throw
+  /// would report the opposite of what happened.
+  Future<void> _recordPlay(Track track) async {
+    try {
+      await library.recordPlay(track.id, DateTime.now());
+    } catch (e) {
+      AppLogger.instance.warn(
+        'playback',
+        'could not record the play of "${track.title}"',
+        error: e,
+      );
+    }
+  }
+
   Future<void> _playCurrent() async {
     final track = currentTrack;
     if (track == null) return;
@@ -225,7 +243,7 @@ class PlaybackController extends ChangeNotifier {
       await engine.play();
 
       _recent.record(track.id);
-      await library.recordPlay(track.id, DateTime.now());
+      await _recordPlay(track);
       // "started", not "playing": this line records that the engine accepted
       // the stream, which is not the same as sound coming out. The engine logs
       // `first audio at N ms` when the position really moves, and a refusal is
